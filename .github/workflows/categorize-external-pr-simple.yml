@@ -91,19 +91,11 @@ jobs:
           gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "$TYPE_LABEL"
           echo "✅ Applied labels: $SIZE_LABEL, $TYPE_LABEL"
 
-      - name: Post comment
+      - name: Log categorization
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           SIZE: ${{ steps.size.outputs.size }}
           TYPE: ${{ steps.type.outputs.type }}
         run: |
-          gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "## 🤖 Automated PR Analysis
-
-Thank you for your contribution! Your PR has been categorized as:
-- **Size**: $SIZE  
-- **Type**: $TYPE
-
-Our automation will now run validation checks. You'll receive feedback shortly!"
-          echo "✅ Posted categorization comment"
+          echo "✅ PR categorized as Size: $SIZE, Type: $TYPE"
+          echo "Labels applied successfully"
 
