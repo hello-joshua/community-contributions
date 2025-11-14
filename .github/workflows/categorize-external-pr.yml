@@ -1,0 +1,254 @@
+name: Categorize External PR
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - edited
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  categorize:
+    name: Categorize PR by Size and Type
+    # Only run for external contributors
+    if: github.event.pull_request.author_association != 'MEMBER' && github.event.pull_request.author_association != 'OWNER'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Add external PR label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "pr/external"
+          echo "✅ Added pr/external label"
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Run categorization
+        id: categorize
+        uses: ./.github/actions/categorize-pr
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-body: ${{ github.event.pull_request.body }}
+
+      - name: Apply category labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SIZE_LABEL: ${{ steps.categorize.outputs.size-label }}
+          TYPE_LABEL: ${{ steps.categorize.outputs.type-label }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "$SIZE_LABEL"
+          gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "$TYPE_LABEL"
+          echo "✅ Applied labels: $SIZE_LABEL, $TYPE_LABEL"
+
+      - name: Post comprehensive categorization comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SIZE: ${{ steps.categorize.outputs.size }}
+          TYPE: ${{ steps.categorize.outputs.type }}
+          CONFLICT: ${{ steps.categorize.outputs.conflict }}
+        run: |
+          # Determine emoji and description based on size
+          case "$SIZE" in
+            small)
+              SIZE_EMOJI="🟢"
+              SIZE_DESC="Small"
+              SIZE_CRITERIA="< 100 lines changed, 1-3 files"
+              EXPECTED_FLOW="### ⚡ What happens next for Small PRs:
+
+1. **Automated Validation** (~ 2-5 minutes)
+   - ✅ Linting and code formatting checks
+   - ✅ Verify tests exist for changed code
+   - ✅ Run relevant test suites
+   - ✅ Check PR requirements (description, issue reference, etc.)
+
+2. **AI Code Review** (~ 1-2 minutes)
+   - 🤖 Lightweight review focusing on critical bugs and security issues
+   - 💡 Suggestions for obvious improvements
+   - ⚠️ Flags potential problems
+
+3. **Human Review** (hours to 1-2 days)
+   - 👤 Final approval from a maintainer
+   - 💬 Any clarifying questions
+   - ✅ Merge when approved!
+
+**Timeline**: Most Small PRs are reviewed within 1-2 days."
+              TIPS="### 💡 Tips for Small PRs:
+- Run tests locally before pushing
+- Ensure code follows style guidelines
+- Keep description clear and concise
+- Respond promptly to any feedback"
+              ;;
+            medium)
+              SIZE_EMOJI="🟡"
+              SIZE_DESC="Medium"
+              SIZE_CRITERIA="100-500 lines changed, 4-10 files"
+              EXPECTED_FLOW="### 📋 What happens next for Medium PRs:
+
+1. **Comprehensive Validation** (~ 5-10 minutes)
+   - ✅ Full linting and type checking
+   - ✅ Verify comprehensive test coverage
+   - ✅ Run complete test suite
+   - ✅ Validate all PR requirements
+
+2. **Thorough AI Code Review** (~ 3-5 minutes)
+   - 🤖 In-depth code analysis
+   - 🔍 Best practices validation
+   - 🛡️ Security and performance review
+   - 📝 Detailed feedback and suggestions
+
+3. **Squad Routing & Human Review** (2-5 days)
+   - 👥 Routed to relevant squad automatically
+   - 💬 Detailed code review by team members
+   - 🔄 May require iterations
+   - ✅ Human approval required before merge
+
+**Timeline**: Medium PRs typically take 2-5 days for full review."
+              TIPS="### 💡 Tips for Medium PRs:
+- Ensure comprehensive test coverage
+- Document complex logic
+- Break into smaller commits if possible
+- Be prepared for detailed feedback"
+              ;;
+            large)
+              SIZE_EMOJI="🔴"
+              SIZE_DESC="Large"
+              SIZE_CRITERIA="> 500 lines changed, > 10 files"
+              EXPECTED_FLOW="### 🚦 What happens next for Large PRs:
+
+**IMPORTANT**: Large PRs follow a different process to ensure your effort is well-directed!
+
+#### Phase 1: Early Human Alignment (FIRST)
+1. 👥 **Squad notified immediately** for early review
+2. 🤝 **Human reviewer checks your approach** before automation runs
+3. 💬 **Discussion about implementation strategy**
+4. ✅ **Alignment approval** when approach is confirmed
+
+**⚠️ Please wait for alignment approval before investing more effort!**
+
+#### Phase 2: Automated Validation (AFTER alignment)
+5. ✅ Basic validation checks
+6. 🧪 Smoke tests
+7. 🤖 Lightweight AI review (architecture focus)
+
+#### Phase 3: Detailed Human Review
+8. 👥 In-depth code review by squad
+9. 🔄 Iterative improvements
+10. ✅ Final approval and merge
+
+**Timeline**: Large PRs typically take 1-2 weeks or more. The early alignment step helps avoid wasted effort on misaligned implementations."
+              TIPS="### 💡 Tips for Large PRs:
+- **Wait for alignment approval** before extensive work
+- Consider breaking into smaller PRs if possible
+- Include high-level design notes
+- Document architectural decisions
+- Be very responsive to early feedback"
+              ;;
+          esac
+          
+          # Type description
+          case "$TYPE" in
+            docs)
+              TYPE_EMOJI="📝"
+              TYPE_DESC="Documentation"
+              TYPE_INFO="Changes to documentation, guides, or comments"
+              ;;
+            bugfix)
+              TYPE_EMOJI="🐛"
+              TYPE_DESC="Bug Fix"
+              TYPE_INFO="Fixes for existing issues or problems"
+              ;;
+            refactor)
+              TYPE_EMOJI="🔨"
+              TYPE_DESC="Refactor"
+              TYPE_INFO="Code reorganization without changing functionality"
+              ;;
+            feature)
+              TYPE_EMOJI="✨"
+              TYPE_DESC="Feature"
+              TYPE_INFO="New functionality or enhancements"
+              ;;
+          esac
+          
+          # Build comprehensive comment
+          COMMENT="# 🤖 Automated PR Analysis
+
+Thank you for your contribution to Grafana! Your PR has been analyzed and categorized.
+
+---
+
+## 📊 PR Categorization
+
+| Category | Value | Details |
+|----------|-------|---------|
+| **Size** | $SIZE_EMOJI **$SIZE_DESC** | $SIZE_CRITERIA |
+| **Type** | $TYPE_EMOJI **$TYPE_DESC** | $TYPE_INFO |
+
+$EXPECTED_FLOW
+
+---
+
+## ✅ Validation Requirements
+
+Your PR will be checked for:
+- **Tests**: All changed code must have corresponding tests
+- **Linting**: Code must pass style and format checks
+- **Description**: Clear explanation of changes
+- **Issue Reference**: Link to related issue (if applicable)
+- **Commit Format**: Follow \`Area: Description\` format
+
+$TIPS
+
+---
+
+## 📚 Additional Resources
+
+- [Contributing Guidelines](../contribute/create-pull-request.md) - Full contribution guide
+- [External PR Workflow](../contribute/external-pr-workflow.md) - Detailed workflow explanation
+- [Style Guides](../contribute/style-guides/) - Code style requirements
+
+---
+
+## 🆘 Need Help?
+
+- **Questions about this workflow?** Comment on this PR
+- **General contribution questions?** Join our [community Slack](https://grafana.com/slack)
+- **Found a bug in the automation?** Let us know in the comments"
+
+          # Add conflict warning if present
+          if [ "$CONFLICT" = "true" ]; then
+            COMMENT="$COMMENT
+
+---
+
+⚠️ **Auto-Detection Override**
+
+Our automation detected a different size category than what may have been indicated. The categorization above is based on:
+- **Lines changed**: Actual code changes analyzed
+- **Files modified**: Number of files touched
+- **Complexity**: Overall impact assessment
+
+This helps ensure appropriate review depth for your changes."
+          fi
+          
+          COMMENT="$COMMENT
+
+---
+
+*This analysis was generated automatically by the Grafana PR automation system. The validation workflow will begin shortly.*"
+          
+          # Post comment
+          gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "$COMMENT"
+          echo "✅ Posted comprehensive categorization comment"
+

@@ -1,0 +1,354 @@
+name: Validate Large PR
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+      - synchronize
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+  checks: write
+
+jobs:
+  early-alignment:
+    name: Request Early Human Alignment
+    # Only run when size:large label is applied AND alignment-approved label is NOT present
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'size:large') &&
+      !contains(github.event.pull_request.labels.*.name, 'alignment-approved')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Detect changed areas
+        id: detect-areas
+        uses: ./.github/actions/detect-areas
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+      - name: Post alignment request comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          AREAS: ${{ steps.detect-areas.outputs.areas }}
+          PRIMARY_AREA: ${{ steps.detect-areas.outputs.primary-area }}
+        run: |
+          COMMENT="## 🔴 Large PR - Early Human Alignment Required
+
+Thank you for your contribution! This PR has been categorized as **Large** based on its scope.
+
+### Why Early Alignment?
+
+For large PRs, we request early human review **before** running extensive automated validation. This helps:
+- ✅ Ensure the approach aligns with project goals
+- ✅ Avoid wasted effort on misaligned implementations
+- ✅ Provide early architectural feedback
+- ✅ Guide you in the right direction before heavy development
+
+### Detected Changes:
+- 📍 Primary area: \`$PRIMARY_AREA\`
+- 📍 All affected areas: \`$AREAS\`
+
+### Next Steps:
+
+**For the contributor:**
+1. ⏸️  Please wait for a squad member to review the approach
+2. 💬 Be ready to discuss the implementation strategy
+3. 📝 Consider adding high-level design notes if not already present
+
+**For squad members:**
+1. 👀 Please review this PR for architectural alignment
+2. 💬 Discuss the approach with the contributor
+3. ✅ Once aligned, add the \`alignment-approved\` label to proceed with automated validation
+
+---
+
+**Squad members**: This PR has been routed to your team based on the affected areas. A Slack notification has been sent.
+
+*This is part of our Large PR workflow to ensure early alignment and efficient collaboration.*"
+          
+          gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "$COMMENT"
+          echo "✅ Posted alignment request comment"
+
+      - name: Add awaiting-alignment label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "awaiting-alignment"
+          echo "✅ Added awaiting-alignment label"
+
+      - name: Notify squad for early alignment
+        uses: ./.github/actions/notify-squad
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-author: ${{ github.event.pull_request.user.login }}
+          pr-url: ${{ github.event.pull_request.html_url }}
+          category-size: large
+          category-type: ${{ steps.detect-areas.outputs.primary-area }}
+          stage: early-alignment
+          validation-status: pending
+          ai-review-summary: Awaiting early human alignment before automated validation
+
+  automated-validation:
+    name: Large PR Automated Validation
+    # Only run when both size:large AND alignment-approved labels are present
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'size:large') &&
+      contains(github.event.pull_request.labels.*.name, 'alignment-approved')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Remove awaiting-alignment label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --remove-label "awaiting-alignment" || true
+
+      - name: Detect changed areas
+        id: detect-areas
+        uses: ./.github/actions/detect-areas
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+      - name: Check PR requirements
+        id: check-requirements
+        uses: ./.github/actions/check-requirements
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+      - name: Verify tests exist
+        id: verify-tests
+        uses: ./.github/actions/verify-tests
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+      - name: Run basic linting
+        id: lint
+        continue-on-error: true
+        run: |
+          # For large PRs, run basic linting only (not comprehensive)
+          # Focus on critical issues, not style nitpicks
+          AREAS="${{ steps.detect-areas.outputs.areas }}"
+          lint_failed=false
+          
+          if echo "$AREAS" | grep -q "frontend"; then
+            echo "Running basic frontend linting..."
+            if command -v yarn &> /dev/null; then
+              yarn install --immutable || lint_failed=true
+              yarn lint || lint_failed=true
+            else
+              echo "⚠️ yarn not found, skipping frontend lint"
+            fi
+          fi
+          
+          if echo "$AREAS" | grep -q "backend"; then
+            echo "Running basic backend linting..."
+            if command -v go &> /dev/null; then
+              go fmt ./... || lint_failed=true
+              go vet ./... || lint_failed=true
+            else
+              echo "⚠️ go not found, skipping backend lint"
+            fi
+          fi
+          
+          if [ "$lint_failed" = true ]; then
+            echo "lint-passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "lint-passed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run smoke tests
+        id: tests
+        continue-on-error: true
+        run: |
+          # For large PRs, run smoke tests only (not full suite)
+          AREAS="${{ steps.detect-areas.outputs.areas }}"
+          tests_failed=false
+          
+          if echo "$AREAS" | grep -q "frontend"; then
+            echo "Running frontend smoke tests..."
+            if command -v yarn &> /dev/null && [ -f "package.json" ]; then
+              # Run limited test set
+              yarn test:ci --maxWorkers=2 || tests_failed=true
+            else
+              echo "⚠️ Skipping frontend tests"
+            fi
+          fi
+          
+          if echo "$AREAS" | grep -q "backend"; then
+            echo "Running backend smoke tests..."
+            if command -v go &> /dev/null; then
+              # Run only short tests for large PRs
+              go test -short -timeout=15m ./... || tests_failed=true
+            else
+              echo "⚠️ Skipping backend tests"
+            fi
+          fi
+          
+          if [ "$tests_failed" = true ]; then
+            echo "tests-passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "tests-passed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluate validation results
+        id: evaluate
+        shell: bash
+        env:
+          REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
+          TESTS_EXIST: ${{ steps.verify-tests.outputs.tests-exist }}
+          LINT_PASSED: ${{ steps.lint.outputs.lint-passed }}
+          TESTS_PASSED: ${{ steps.tests.outputs.tests-passed }}
+        run: |
+          all_passed=true
+          
+          if [ "$REQUIREMENTS_MET" != "true" ]; then all_passed=false; fi
+          if [ "$TESTS_EXIST" != "true" ]; then all_passed=false; fi
+          if [ "$LINT_PASSED" != "true" ]; then all_passed=false; fi
+          if [ "$TESTS_PASSED" != "true" ]; then all_passed=false; fi
+          
+          echo "all-passed=$all_passed" >> "$GITHUB_OUTPUT"
+
+      - name: Post validation results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
+          REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
+          MISSING_REQUIREMENTS: ${{ steps.check-requirements.outputs.missing-requirements }}
+          TESTS_EXIST: ${{ steps.verify-tests.outputs.tests-exist }}
+          MISSING_TESTS: ${{ steps.verify-tests.outputs.missing-tests }}
+          LINT_PASSED: ${{ steps.lint.outputs.lint-passed }}
+          TESTS_PASSED: ${{ steps.tests.outputs.tests-passed }}
+          AREAS: ${{ steps.detect-areas.outputs.areas }}
+        run: |
+          if [ "$ALL_PASSED" = "true" ]; then
+            COMMENT="## ✅ Large PR Validation Passed (Post-Alignment)
+
+Alignment has been approved and automated validation has passed!
+
+### Validation Results:
+- ✅ Alignment approved by squad
+- ✅ PR requirements met
+- ✅ Tests exist for changed code
+- ✅ Basic linting checks passed
+- ✅ Smoke tests passed
+- 📍 Affected areas: \`$AREAS\`
+
+**Next steps:**
+1. 🤖 Cursor's Bugbot will perform lightweight architectural review
+2. 👥 Squad will conduct detailed human review
+3. 📝 Expect thorough discussion given the size of changes
+
+**Note**: Large PRs receive focused validation on critical issues and architecture, with detailed human review.
+
+Thank you for your contribution!"
+          else
+            COMMENT="## ⚠️ Large PR Validation - Action Required (Post-Alignment)
+
+Alignment has been approved, but some automated checks did not pass:
+
+### Validation Results:"
+            
+            if [ "$REQUIREMENTS_MET" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ PR requirements met"
+            else
+              COMMENT="$COMMENT
+- ❌ **PR requirements not met:**
+\`\`\`
+$MISSING_REQUIREMENTS
+\`\`\`"
+            fi
+            
+            if [ "$TESTS_EXIST" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ Tests exist for changed code"
+            else
+              COMMENT="$COMMENT
+- ❌ **Missing tests for:**
+\`\`\`
+$MISSING_TESTS
+\`\`\`
+Please ensure test coverage for all significant changes."
+            fi
+            
+            if [ "$LINT_PASSED" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ Basic linting checks passed"
+            else
+              COMMENT="$COMMENT
+- ❌ **Linting checks failed** - Please fix critical linting issues"
+            fi
+            
+            if [ "$TESTS_PASSED" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ Smoke tests passed"
+            else
+              COMMENT="$COMMENT
+- ❌ **Tests failed** - Please ensure basic functionality works"
+            fi
+            
+            COMMENT="$COMMENT
+
+### How to fix:
+1. Address the issues listed above
+2. Push your changes - validation will run automatically
+
+**Note**: For Large PRs, we focus on critical issues and architecture. Detailed review will happen during human review.
+
+*This is an automated validation for Large PRs (post-alignment).*"
+          fi
+          
+          gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "$COMMENT"
+
+      - name: Notify squad about validation completion
+        if: steps.evaluate.outputs.all-passed == 'true'
+        uses: ./.github/actions/notify-squad
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-author: ${{ github.event.pull_request.user.login }}
+          pr-url: ${{ github.event.pull_request.html_url }}
+          category-size: large
+          category-type: ${{ steps.detect-areas.outputs.primary-area }}
+          stage: ready-for-review
+          validation-status: passed
+          ai-review-summary: Post-alignment validation complete, ready for detailed review
+
+      - name: Set status check
+        env:
+          ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
+        run: |
+          if [ "$ALL_PASSED" = "true" ]; then
+            echo "✅ Post-alignment validation passed - ready for AI architectural review and squad review - Squad notified"
+            exit 0
+          else
+            echo "❌ Validation failed - action required"
+            exit 1
+          fi
+

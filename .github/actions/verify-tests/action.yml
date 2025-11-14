@@ -1,0 +1,139 @@
+name: 'Verify Tests'
+description: 'Verify that appropriate test files exist for changed code'
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  pr-number:
+    description: 'Pull request number'
+    required: true
+outputs:
+  tests-exist:
+    description: 'Whether tests exist for changed code'
+    value: ${{ steps.check-tests.outputs.tests-exist }}
+  missing-tests:
+    description: 'List of files missing tests'
+    value: ${{ steps.check-tests.outputs.missing-tests }}
+  test-files-found:
+    description: 'List of test files found'
+    value: ${{ steps.check-tests.outputs.test-files-found }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get changed files
+      id: changed-files
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+      run: |
+        # Get all changed files in the PR
+        changed_files=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
+        echo "$changed_files" > changed_files.txt
+        
+        # Separate source files from test files
+        frontend_files=$(echo "$changed_files" | grep -E '\.(ts|tsx|js|jsx)$' | grep -v -E '\.test\.(ts|tsx|js|jsx)$' | grep -v -E '\.spec\.(ts|tsx|js|jsx)$' || true)
+        backend_files=$(echo "$changed_files" | grep -E '\.go$' | grep -v '_test\.go$' || true)
+        
+        echo "frontend-files<<EOF" >> "$GITHUB_OUTPUT"
+        echo "$frontend_files" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+        
+        echo "backend-files<<EOF" >> "$GITHUB_OUTPUT"
+        echo "$backend_files" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+    - name: Check for test files
+      id: check-tests
+      shell: bash
+      env:
+        FRONTEND_FILES: ${{ steps.changed-files.outputs.frontend-files }}
+        BACKEND_FILES: ${{ steps.changed-files.outputs.backend-files }}
+      run: |
+        missing_tests=""
+        found_tests=""
+        all_tests_exist=true
+        
+        # Check frontend files
+        if [ -n "$FRONTEND_FILES" ]; then
+          while IFS= read -r file; do
+            if [ -z "$file" ]; then continue; fi
+            
+            # Skip files in certain directories that don't need tests
+            if echo "$file" | grep -qE '^(docs/|contribute/|\.github/)'; then
+              continue
+            fi
+            
+            # Generate possible test file paths
+            dir=$(dirname "$file")
+            base=$(basename "$file" | sed -E 's/\.(ts|tsx|js|jsx)$//')
+            ext="${file##*.}"
+            
+            # Check for common test file patterns
+            test_patterns=(
+              "${dir}/${base}.test.${ext}"
+              "${dir}/${base}.spec.${ext}"
+              "${dir}/__tests__/${base}.test.${ext}"
+              "${dir}/__tests__/${base}.spec.${ext}"
+            )
+            
+            test_found=false
+            for pattern in "${test_patterns[@]}"; do
+              if [ -f "$pattern" ]; then
+                test_found=true
+                found_tests="${found_tests}${pattern}\n"
+                break
+              fi
+            done
+            
+            if [ "$test_found" = false ]; then
+              missing_tests="${missing_tests}${file}\n"
+              all_tests_exist=false
+            fi
+          done <<< "$FRONTEND_FILES"
+        fi
+        
+        # Check backend files
+        if [ -n "$BACKEND_FILES" ]; then
+          while IFS= read -r file; do
+            if [ -z "$file" ]; then continue; fi
+            
+            # Skip files in certain directories
+            if echo "$file" | grep -qE '^(docs/|contribute/|\.github/)'; then
+              continue
+            fi
+            
+            # Generate test file path (Go convention: filename_test.go)
+            test_file="${file%.go}_test.go"
+            
+            if [ -f "$test_file" ]; then
+              found_tests="${found_tests}${test_file}\n"
+            else
+              missing_tests="${missing_tests}${file}\n"
+              all_tests_exist=false
+            fi
+          done <<< "$BACKEND_FILES"
+        fi
+        
+        # Set outputs
+        if [ "$all_tests_exist" = true ]; then
+          echo "tests-exist=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "tests-exist=false" >> "$GITHUB_OUTPUT"
+        fi
+        
+        echo "missing-tests<<EOF" >> "$GITHUB_OUTPUT"
+        echo -e "$missing_tests" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+        
+        echo "test-files-found<<EOF" >> "$GITHUB_OUTPUT"
+        echo -e "$found_tests" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+        
+        if [ "$all_tests_exist" = true ]; then
+          echo "✅ All changed code files have corresponding tests"
+        else
+          echo "⚠️ Some files are missing tests"
+        fi
+
