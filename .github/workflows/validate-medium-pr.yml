@@ -1,0 +1,259 @@
+name: Validate Medium PR
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+      - synchronize
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+  checks: write
+
+jobs:
+  validate:
+    name: Medium PR Validation
+    # Only run when size:medium label is applied
+    if: contains(github.event.pull_request.labels.*.name, 'size:medium')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Detect changed areas
+        id: detect-areas
+        uses: ./.github/actions/detect-areas
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+      - name: Check PR requirements
+        id: check-requirements
+        uses: ./.github/actions/check-requirements
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+      - name: Verify tests exist
+        id: verify-tests
+        uses: ./.github/actions/verify-tests
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+      - name: Run comprehensive linting
+        id: lint
+        continue-on-error: true
+        run: |
+          AREAS="${{ steps.detect-areas.outputs.areas }}"
+          lint_failed=false
+          
+          if echo "$AREAS" | grep -q "frontend"; then
+            echo "Running comprehensive frontend linting..."
+            if command -v yarn &> /dev/null; then
+              yarn install --immutable || lint_failed=true
+              yarn lint || lint_failed=true
+              yarn typecheck || lint_failed=true
+            else
+              echo "⚠️ yarn not found, skipping frontend lint"
+            fi
+          fi
+          
+          if echo "$AREAS" | grep -q "backend"; then
+            echo "Running comprehensive backend linting..."
+            if command -v go &> /dev/null; then
+              go fmt ./... || lint_failed=true
+              go vet ./... || lint_failed=true
+              # Run golangci-lint if available
+              if command -v golangci-lint &> /dev/null; then
+                golangci-lint run || lint_failed=true
+              fi
+            else
+              echo "⚠️ go not found, skipping backend lint"
+            fi
+          fi
+          
+          if [ "$lint_failed" = true ]; then
+            echo "lint-passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "lint-passed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run comprehensive tests
+        id: tests
+        continue-on-error: true
+        run: |
+          AREAS="${{ steps.detect-areas.outputs.areas }}"
+          tests_failed=false
+          
+          if echo "$AREAS" | grep -q "frontend"; then
+            echo "Running comprehensive frontend tests..."
+            if command -v yarn &> /dev/null && [ -f "package.json" ]; then
+              yarn test:ci || tests_failed=true
+            else
+              echo "⚠️ Skipping frontend tests"
+            fi
+          fi
+          
+          if echo "$AREAS" | grep -q "backend"; then
+            echo "Running comprehensive backend tests..."
+            if command -v go &> /dev/null; then
+              # Run full test suite for medium PRs
+              go test -timeout=30m ./... || tests_failed=true
+            else
+              echo "⚠️ Skipping backend tests"
+            fi
+          fi
+          
+          if [ "$tests_failed" = true ]; then
+            echo "tests-passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "tests-passed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluate validation results
+        id: evaluate
+        shell: bash
+        env:
+          REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
+          TESTS_EXIST: ${{ steps.verify-tests.outputs.tests-exist }}
+          LINT_PASSED: ${{ steps.lint.outputs.lint-passed }}
+          TESTS_PASSED: ${{ steps.tests.outputs.tests-passed }}
+        run: |
+          all_passed=true
+          
+          if [ "$REQUIREMENTS_MET" != "true" ]; then all_passed=false; fi
+          if [ "$TESTS_EXIST" != "true" ]; then all_passed=false; fi
+          if [ "$LINT_PASSED" != "true" ]; then all_passed=false; fi
+          if [ "$TESTS_PASSED" != "true" ]; then all_passed=false; fi
+          
+          echo "all-passed=$all_passed" >> "$GITHUB_OUTPUT"
+
+      - name: Post validation results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
+          REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
+          MISSING_REQUIREMENTS: ${{ steps.check-requirements.outputs.missing-requirements }}
+          TESTS_EXIST: ${{ steps.verify-tests.outputs.tests-exist }}
+          MISSING_TESTS: ${{ steps.verify-tests.outputs.missing-tests }}
+          LINT_PASSED: ${{ steps.lint.outputs.lint-passed }}
+          TESTS_PASSED: ${{ steps.tests.outputs.tests-passed }}
+          AREAS: ${{ steps.detect-areas.outputs.areas }}
+        run: |
+          if [ "$ALL_PASSED" = "true" ]; then
+            COMMENT="## ✅ Medium PR Validation Passed
+
+All comprehensive automated checks have passed! Your PR is ready for thorough AI code review.
+
+### Validation Results:
+- ✅ PR requirements met
+- ✅ Tests exist for changed code
+- ✅ Comprehensive linting checks passed
+- ✅ Full test suite passed
+- 📍 Affected areas: \`$AREAS\`
+
+**Next steps:**
+1. 🤖 Cursor's Bugbot will perform thorough code review
+2. 👥 Your PR will be routed to the relevant squad
+3. 👤 Human review required before merge
+
+This PR has been categorized as Medium size, which means it will receive comprehensive validation and review.
+
+Thank you for your contribution!"
+          else
+            COMMENT="## ⚠️ Medium PR Validation - Action Required
+
+Some comprehensive automated checks did not pass. Please address the following:
+
+### Validation Results:"
+            
+            if [ "$REQUIREMENTS_MET" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ PR requirements met"
+            else
+              COMMENT="$COMMENT
+- ❌ **PR requirements not met:**
+\`\`\`
+$MISSING_REQUIREMENTS
+\`\`\`"
+            fi
+            
+            if [ "$TESTS_EXIST" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ Tests exist for changed code"
+            else
+              COMMENT="$COMMENT
+- ❌ **Missing tests for:**
+\`\`\`
+$MISSING_TESTS
+\`\`\`
+Please add comprehensive test coverage for all changes."
+            fi
+            
+            if [ "$LINT_PASSED" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ Comprehensive linting checks passed"
+            else
+              COMMENT="$COMMENT
+- ❌ **Linting checks failed** - Please run linting locally and fix all issues"
+            fi
+            
+            if [ "$TESTS_PASSED" = "true" ]; then
+              COMMENT="$COMMENT
+- ✅ Full test suite passed"
+            else
+              COMMENT="$COMMENT
+- ❌ **Tests failed** - Please ensure all tests pass locally"
+            fi
+            
+            COMMENT="$COMMENT
+
+### How to fix:
+1. Address the issues listed above
+2. Push your changes - validation will run automatically
+3. See [Contributing Guidelines](../contribute/create-pull-request.md) for details
+
+**Note**: Medium PRs undergo comprehensive validation including full test suites and thorough linting.
+
+*This is an automated validation for Medium PRs.*"
+          fi
+          
+          gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "$COMMENT"
+
+      - name: Notify squad if validation passed
+        if: steps.evaluate.outputs.all-passed == 'true'
+        uses: ./.github/actions/notify-squad
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-author: ${{ github.event.pull_request.user.login }}
+          pr-url: ${{ github.event.pull_request.html_url }}
+          category-size: medium
+          category-type: ${{ steps.detect-areas.outputs.primary-area }}
+          stage: validation-passed
+          validation-status: passed
+          ai-review-summary: Ready for thorough AI review
+
+      - name: Set status check
+        env:
+          ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
+        run: |
+          if [ "$ALL_PASSED" = "true" ]; then
+            echo "✅ Comprehensive validation passed - ready for AI review and squad routing - Squad notified"
+            exit 0
+          else
+            echo "❌ Validation failed - action required"
+            exit 1
+          fi
+

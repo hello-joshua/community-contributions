@@ -1,0 +1,137 @@
+name: 'Categorize PR'
+description: 'Automatically categorize PRs by size and type based on changes and existing labels'
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  pr-number:
+    description: 'Pull request number'
+    required: true
+  pr-body:
+    description: 'Pull request body/description'
+    required: false
+    default: ''
+outputs:
+  size:
+    description: 'Detected size category (small/medium/large)'
+    value: ${{ steps.categorize.outputs.size }}
+  type:
+    description: 'Detected type category (docs/bugfix/refactor/feature)'
+    value: ${{ steps.categorize.outputs.type }}
+  size-label:
+    description: 'Size label to apply'
+    value: ${{ steps.categorize.outputs.size-label }}
+  type-label:
+    description: 'Type label to apply'
+    value: ${{ steps.categorize.outputs.type-label }}
+  conflict:
+    description: 'Whether there is a conflict between contributor selection and auto-detection'
+    value: ${{ steps.categorize.outputs.conflict }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Get PR details and changes
+      id: pr-details
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+      run: |
+        # Get PR file changes
+        pr_files=$(gh pr view "$PR_NUMBER" --json files --jq '.files')
+        
+        # Count lines changed and files touched
+        lines_added=$(echo "$pr_files" | jq '[.[].additions] | add // 0')
+        lines_deleted=$(echo "$pr_files" | jq '[.[].deletions] | add // 0')
+        total_lines=$((lines_added + lines_deleted))
+        files_count=$(echo "$pr_files" | jq 'length')
+        
+        echo "lines-changed=$total_lines" >> "$GITHUB_OUTPUT"
+        echo "files-count=$files_count" >> "$GITHUB_OUTPUT"
+        
+        # Get file paths for type detection
+        file_paths=$(echo "$pr_files" | jq -r '.[].path' | tr '\n' ',' | sed 's/,$//')
+        echo "file-paths=$file_paths" >> "$GITHUB_OUTPUT"
+        
+        # Get existing labels
+        labels=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' | tr '\n' ',' | sed 's/,$//')
+        echo "existing-labels=$labels" >> "$GITHUB_OUTPUT"
+
+    - name: Categorize PR
+      id: categorize
+      shell: bash
+      env:
+        LINES_CHANGED: ${{ steps.pr-details.outputs.lines-changed }}
+        FILES_COUNT: ${{ steps.pr-details.outputs.files-count }}
+        FILE_PATHS: ${{ steps.pr-details.outputs.file-paths }}
+        EXISTING_LABELS: ${{ steps.pr-details.outputs.existing-labels }}
+        PR_BODY: ${{ inputs.pr-body }}
+      run: |
+        # Determine size
+        if [ "$LINES_CHANGED" -lt 100 ] && [ "$FILES_COUNT" -le 3 ]; then
+          SIZE="small"
+        elif [ "$LINES_CHANGED" -lt 500 ] && [ "$FILES_COUNT" -le 10 ]; then
+          SIZE="medium"
+        else
+          SIZE="large"
+        fi
+        
+        echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+        echo "size-label=size:$SIZE" >> "$GITHUB_OUTPUT"
+        
+        # Determine type from existing labels first
+        TYPE=""
+        if echo "$EXISTING_LABELS" | grep -q "type/docs\|area/docs"; then
+          TYPE="docs"
+        elif echo "$EXISTING_LABELS" | grep -q "type/bug"; then
+          TYPE="bugfix"
+        elif echo "$EXISTING_LABELS" | grep -q "type/feature"; then
+          TYPE="feature"
+        elif echo "$EXISTING_LABELS" | grep -q "type/refactor"; then
+          TYPE="refactor"
+        fi
+        
+        # Fallback to file path analysis if no type labels exist
+        if [ -z "$TYPE" ]; then
+          if echo "$FILE_PATHS" | grep -q "docs/\|contribute/\|\.md$"; then
+            TYPE="docs"
+          elif echo "$FILE_PATHS" | grep -q "test\|spec"; then
+            # If mostly test files, might be bugfix
+            TYPE="bugfix"
+          elif echo "$PR_BODY" | grep -qi "fix\|bug\|issue"; then
+            TYPE="bugfix"
+          elif echo "$PR_BODY" | grep -qi "refactor\|reorganiz"; then
+            TYPE="refactor"
+          else
+            # Default to feature for code changes
+            TYPE="feature"
+          fi
+        fi
+        
+        echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+        echo "type-label=pr-category:$TYPE" >> "$GITHUB_OUTPUT"
+        
+        # Check for conflicts with contributor selection
+        CONFLICT="false"
+        if echo "$PR_BODY" | grep -q "🟢 Small" && [ "$SIZE" != "small" ]; then
+          CONFLICT="true"
+        elif echo "$PR_BODY" | grep -q "🟡 Medium" && [ "$SIZE" != "medium" ]; then
+          CONFLICT="true"
+        elif echo "$PR_BODY" | grep -q "🔴 Large" && [ "$SIZE" != "large" ]; then
+          CONFLICT="true"
+        fi
+        
+        echo "conflict=$CONFLICT" >> "$GITHUB_OUTPUT"
+        
+        echo "✅ Categorized as: size=$SIZE, type=$TYPE"
+        if [ "$CONFLICT" = "true" ]; then
+          echo "⚠️  Conflict detected with contributor's self-selection"
+        fi
+
