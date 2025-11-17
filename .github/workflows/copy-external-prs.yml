@@ -148,9 +148,15 @@ jobs:
             # Push branch
             git push origin "$branch_name"
             
+            # Sanitize PR body to break issue references and URLs by adding spaces
+            sanitized_body=$(echo "$pr_body" | \
+              sed 's/<!--.*-->//g' | \
+              sed -E 's/#([0-9]+)/# \1/g' | \
+              sed -E 's/\/(issues|pull)\//\/\1\/ /g')
+            
             # Create PR description file to avoid quote issues
             {
-              echo "$pr_body"
+              echo "$sanitized_body"
               echo ""
               echo "---"
               echo ""
