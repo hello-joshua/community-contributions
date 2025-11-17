@@ -2,7 +2,7 @@ name: Copy External PRs
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes
+    - cron: '*/30 * * * *'  # Every 30 minutes
   workflow_dispatch:  # Manual trigger for testing
 
 permissions:
@@ -99,9 +99,9 @@ jobs:
           
           copied_prs=$(jq -r '.copied_prs[]' .github/pr-copy-tracker.json)
           
-          # Process up to 5 PRs
+          # Process only 1 PR per run
           processed=0
-          max_per_run=5
+          max_per_run=1
           
           while read -r pr; do
             if [ -z "$pr" ]; then continue; fi
@@ -132,17 +132,59 @@ jobs:
             # Create branch
             git checkout -b "$branch_name"
             
-            # Create dummy test file
-            mkdir -p .github/test-data
-            {
-              echo "Test data for copied PR #${pr_number}"
-              echo "Original title: ${pr_title}"
-              echo "Copy timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-              echo "This is a test copy for validating PR workflows."
-            } > ".github/test-data/pr-copy-${pr_number}.txt"
-            
-            git add .github/test-data/pr-copy-${pr_number}.txt
-            git commit -m "Test: Copy of external PR for workflow validation"
+            # Fetch the actual PR changes from upstream
+            echo "Fetching code changes from PR #${pr_number}..."
+            if gh pr diff "$pr_number" --repo grafana/grafana > /tmp/pr_${pr_number}.patch; then
+              echo "Applying changes..."
+              
+              # Try to apply the patch
+              if git apply --3way /tmp/pr_${pr_number}.patch 2>&1; then
+                echo "✅ Successfully applied changes from PR #${pr_number}"
+                
+                # Stage all changes
+                git add -A
+                
+                # Check if there are changes to commit
+                if git diff --staged --quiet; then
+                  echo "⚠️  No changes to commit (patch may be empty or already applied)"
+                else
+                  git commit -m "Copy changes from grafana/grafana PR #${pr_number}
+
+Original title: ${pr_title}"
+                fi
+              else
+                echo "⚠️  Failed to apply patch cleanly. There may be conflicts."
+                echo "Creating a marker file instead..."
+                
+                # Create a conflict marker file
+                mkdir -p .github/test-data
+                {
+                  echo "⚠️ PATCH APPLICATION FAILED"
+                  echo "Original PR: grafana/grafana #${pr_number}"
+                  echo "Title: ${pr_title}"
+                  echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+                  echo ""
+                  echo "The patch could not be applied cleanly. Manual intervention may be required."
+                } > ".github/test-data/pr-copy-${pr_number}-conflict.txt"
+                
+                git add .github/test-data/pr-copy-${pr_number}-conflict.txt
+                git commit -m "Copy attempt for PR #${pr_number} (conflicts detected)"
+              fi
+            else
+              echo "⚠️  Could not fetch patch for PR #${pr_number}"
+              
+              # Create a fallback marker file
+              mkdir -p .github/test-data
+              {
+                echo "⚠️ PATCH FETCH FAILED"
+                echo "Original PR: grafana/grafana #${pr_number}"
+                echo "Title: ${pr_title}"
+                echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+              } > ".github/test-data/pr-copy-${pr_number}-fetch-failed.txt"
+              
+              git add .github/test-data/pr-copy-${pr_number}-fetch-failed.txt
+              git commit -m "Copy attempt for PR #${pr_number} (fetch failed)"
+            fi
             
             # Push branch
             git push origin "$branch_name"
