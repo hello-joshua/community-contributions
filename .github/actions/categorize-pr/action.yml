@@ -44,8 +44,9 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         PR_NUMBER: ${{ inputs.pr-number }}
       run: |
-        # Get PR file changes
-        pr_files=$(gh pr view "$PR_NUMBER" --json files --jq '.files')
+        # Get PR file changes and metadata
+        pr_data=$(gh pr view "$PR_NUMBER" --json files,title,body,labels)
+        pr_files=$(echo "$pr_data" | jq '.files')
         
         # Count lines changed and files touched
         lines_added=$(echo "$pr_files" | jq '[.[].additions] | add // 0')
@@ -61,8 +62,12 @@ runs:
         echo "file-paths=$file_paths" >> "$GITHUB_OUTPUT"
         
         # Get existing labels
-        labels=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' | tr '\n' ',' | sed 's/,$//')
+        labels=$(echo "$pr_data" | jq -r '.labels[].name' | tr '\n' ',' | sed 's/,$//')
         echo "existing-labels=$labels" >> "$GITHUB_OUTPUT"
+        
+        # Get PR title (for type detection in addition to body)
+        pr_title=$(echo "$pr_data" | jq -r '.title // ""')
+        echo "pr-title=$pr_title" >> "$GITHUB_OUTPUT"
 
     - name: Categorize PR
       id: categorize
@@ -73,6 +78,7 @@ runs:
         FILE_PATHS: ${{ steps.pr-details.outputs.file-paths }}
         EXISTING_LABELS: ${{ steps.pr-details.outputs.existing-labels }}
         PR_BODY: ${{ inputs.pr-body }}
+        PR_TITLE: ${{ steps.pr-details.outputs.pr-title }}
       run: |
         # Determine size
         if [ "$LINES_CHANGED" -lt 100 ] && [ "$FILES_COUNT" -le 3 ]; then
@@ -105,15 +111,20 @@ runs:
           cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*$//g')
           cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*\n/\n/g')
           
+          # Combine title and cleaned body for keyword analysis
+          combined_text="$PR_TITLE $cleaned_body"
+          
           if echo "$FILE_PATHS" | grep -q "docs/\|contribute/\|\.md$"; then
             TYPE="docs"
           elif echo "$FILE_PATHS" | grep -q "test\|spec"; then
             # If mostly test files, might be bugfix
             TYPE="bugfix"
-          elif echo "$cleaned_body" | grep -qi "fix\|bug\|issue"; then
+          elif echo "$combined_text" | grep -qiE "\b(fix(es|ed)?|bug|issue|closes? #[0-9]+|resolves? #[0-9]+)\b"; then
             TYPE="bugfix"
-          elif echo "$cleaned_body" | grep -qi "refactor\|reorganiz"; then
+          elif echo "$combined_text" | grep -qiE "\b(refactor(ing)?|reorganiz(e|ing)|restructur(e|ing)|clean(-| )?up)\b"; then
             TYPE="refactor"
+          elif echo "$combined_text" | grep -qiE "\b(feat(ure)?|add(s|ed|ing)?|new|implement(s|ed|ing)?|enhance(ment)?)\b"; then
+            TYPE="feature"
           else
             # Default to feature for code changes
             TYPE="feature"

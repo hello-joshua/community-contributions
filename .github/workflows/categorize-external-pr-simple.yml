@@ -18,127 +18,29 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Get PR details
-        id: pr-details
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          # Get lines changed
-          pr_data=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json additions,deletions,files)
-          additions=$(echo "$pr_data" | jq '.additions')
-          deletions=$(echo "$pr_data" | jq '.deletions')
-          lines_changed=$((additions + deletions))
-          files_count=$(echo "$pr_data" | jq '.files | length')
-          
-          echo "lines-changed=$lines_changed" >> "$GITHUB_OUTPUT"
-          echo "files-count=$files_count" >> "$GITHUB_OUTPUT"
-          echo "📊 PR has $lines_changed lines changed across $files_count files"
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
-      - name: Determine size
-        id: size
-        env:
-          LINES: ${{ steps.pr-details.outputs.lines-changed }}
-          FILES: ${{ steps.pr-details.outputs.files-count }}
-        run: |
-          if [ "$LINES" -lt 100 ] && [ "$FILES" -le 3 ]; then
-            echo "size=small" >> "$GITHUB_OUTPUT"
-            echo "label=size:small" >> "$GITHUB_OUTPUT"
-          elif [ "$LINES" -lt 500 ] && [ "$FILES" -le 10 ]; then
-            echo "size=medium" >> "$GITHUB_OUTPUT"
-            echo "label=size:medium" >> "$GITHUB_OUTPUT"
-          else
-            echo "size=large" >> "$GITHUB_OUTPUT"
-            echo "label=size:large" >> "$GITHUB_OUTPUT"
-          fi
-          echo "📏 PR categorized as: ${{ steps.size.outputs.size }}"
-
-      - name: Determine type from files and context
-        id: type
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          # Get changed files
-          files=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json files --jq '.files[].path' | tr '\n' ' ')
-          
-          # Get PR body and title for keyword analysis
-          pr_data=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json body,title,labels)
-          pr_body=$(echo "$pr_data" | jq -r '.body // ""')
-          pr_title=$(echo "$pr_data" | jq -r '.title // ""')
-          existing_labels=$(echo "$pr_data" | jq -r '.labels[].name' | tr '\n' ' ')
-          
-          # Determine type - check existing Grafana labels first
-          TYPE=""
-          
-          # Priority 1: Check if Grafana's type labels already exist
-          if echo "$existing_labels" | grep -q "type/docs\|area/docs"; then
-            TYPE="docs"
-          elif echo "$existing_labels" | grep -q "type/bug"; then
-            TYPE="bugfix"
-          elif echo "$existing_labels" | grep -q "type/feature"; then
-            TYPE="feature"
-          elif echo "$existing_labels" | grep -q "type/refactor"; then
-            TYPE="refactor"
-          fi
-          
-          # Priority 2: Analyze file paths if no existing labels
-          if [ -z "$TYPE" ]; then
-            if echo "$files" | grep -q "docs/\|\.md$\|contribute/"; then
-              TYPE="docs"
-            elif echo "$files" | grep -qE "test|spec|_test\.go|\.test\.|\.spec\."; then
-              # If mostly test files, likely a bugfix
-              TYPE="bugfix"
-            fi
-          fi
-          
-          # Priority 3: Check PR title and body for keywords
-          if [ -z "$TYPE" ]; then
-            # Strip HTML comments from PR body (template instructions)
-            cleaned_body=$(echo "$pr_body" | sed 's/<!--.*-->//g')
-            
-            # Remove unfilled template placeholders (e.g., "Closes #" or "Fixes #" without a number)
-            # This prevents template boilerplate from being classified as bug reports
-            cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*$//g')
-            cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*\n/\n/g')
-            
-            combined_text="$pr_title $cleaned_body"
-            
-            if echo "$combined_text" | grep -qiE "\b(fix(es|ed)?|bug|issue|closes? #[0-9]+|resolves? #[0-9]+)\b"; then
-              TYPE="bugfix"
-            elif echo "$combined_text" | grep -qiE "\b(refactor(ing)?|reorganiz(e|ing)|restructur(e|ing)|clean(-| )?up)\b"; then
-              TYPE="refactor"
-            elif echo "$combined_text" | grep -qiE "\b(feat(ure)?|add(s|ed|ing)?|new|implement(s|ed|ing)?|enhance(ment)?)\b"; then
-              TYPE="feature"
-            fi
-          fi
-          
-          # Default: feature for code changes
-          if [ -z "$TYPE" ]; then
-            TYPE="feature"
-          fi
-          
-          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
-          echo "label=pr-category:$TYPE" >> "$GITHUB_OUTPUT"
-          echo "📝 PR type detected: $TYPE"
+      - name: Categorize PR
+        id: categorize
+        uses: ./.github/actions/categorize-pr
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-body: ${{ github.event.pull_request.body }}
 
       - name: Apply labels
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          SIZE_LABEL: ${{ steps.size.outputs.label }}
-          TYPE_LABEL: ${{ steps.type.outputs.label }}
+          SIZE_LABEL: ${{ steps.categorize.outputs.size-label }}
+          TYPE_LABEL: ${{ steps.categorize.outputs.type-label }}
         run: |
           gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "$SIZE_LABEL"
           gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "$TYPE_LABEL"
           echo "✅ Applied labels: $SIZE_LABEL, $TYPE_LABEL"
-
-      - name: Checkout for scripts
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            .github/scripts
-          sparse-checkout-cone-mode: false
 
       - name: Post automated comment
         env:
@@ -147,8 +49,8 @@ jobs:
           chmod +x .github/scripts/post-pr-comment.sh
           .github/scripts/post-pr-comment.sh \
             "${{ github.event.pull_request.number }}" \
-            "${{ steps.size.outputs.size }}" \
-            "${{ steps.type.outputs.type }}" \
+            "${{ steps.categorize.outputs.size }}" \
+            "${{ steps.categorize.outputs.type }}" \
             "${{ github.repository }}"
           echo "✅ PR categorized and comment posted"
 
