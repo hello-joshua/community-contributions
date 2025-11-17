@@ -31,12 +31,6 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-      with:
-        fetch-depth: 0
-        persist-credentials: false
-
     - name: Get PR details and changes
       id: pr-details
       shell: bash

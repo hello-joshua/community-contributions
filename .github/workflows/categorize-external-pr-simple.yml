@@ -21,6 +21,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          sparse-checkout: |
+            .github/actions
+            .github/scripts
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       - name: Categorize PR
