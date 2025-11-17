@@ -140,10 +140,10 @@ jobs:
 
 ---
 
-**🤖 Test Copy**
+**Test Copy**
 This is an automated copy of an external contributor PR for testing workflows.
-Source PR: \`grafana/grafana#${pr_number}\`
-(Reference intentionally formatted to prevent auto-linking)"
+Source PR: grafana/grafana #${pr_number}
+(Reference intentionally spaced to prevent auto-linking)"
             
             # Create PR with prefix
             gh pr create \
