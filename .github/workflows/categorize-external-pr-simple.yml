@@ -18,14 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Add external PR label
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "pr/external"
-          echo "✅ Added pr/external label"
-
       - name: Get PR details
         id: pr-details
         env:
@@ -61,7 +53,7 @@ jobs:
           fi
           echo "📏 PR categorized as: ${{ steps.size.outputs.size }}"
 
-      - name: Determine type from files
+      - name: Determine type from files and context
         id: type
         env:
           GH_TOKEN: ${{ github.token }}
@@ -70,15 +62,57 @@ jobs:
           # Get changed files
           files=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json files --jq '.files[].path' | tr '\n' ' ')
           
-          # Check file patterns
-          if echo "$files" | grep -q "docs/\|\.md$\|contribute/"; then
-            echo "type=docs" >> "$GITHUB_OUTPUT"
-            echo "label=pr-category:docs" >> "$GITHUB_OUTPUT"
-          else
-            echo "type=feature" >> "$GITHUB_OUTPUT"
-            echo "label=pr-category:feature" >> "$GITHUB_OUTPUT"
+          # Get PR body and title for keyword analysis
+          pr_data=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json body,title,labels)
+          pr_body=$(echo "$pr_data" | jq -r '.body // ""')
+          pr_title=$(echo "$pr_data" | jq -r '.title // ""')
+          existing_labels=$(echo "$pr_data" | jq -r '.labels[].name' | tr '\n' ' ')
+          
+          # Determine type - check existing Grafana labels first
+          TYPE=""
+          
+          # Priority 1: Check if Grafana's type labels already exist
+          if echo "$existing_labels" | grep -q "type/docs\|area/docs"; then
+            TYPE="docs"
+          elif echo "$existing_labels" | grep -q "type/bug"; then
+            TYPE="bugfix"
+          elif echo "$existing_labels" | grep -q "type/feature"; then
+            TYPE="feature"
+          elif echo "$existing_labels" | grep -q "type/refactor"; then
+            TYPE="refactor"
           fi
-          echo "📝 PR type: ${{ steps.type.outputs.type }}"
+          
+          # Priority 2: Analyze file paths if no existing labels
+          if [ -z "$TYPE" ]; then
+            if echo "$files" | grep -q "docs/\|\.md$\|contribute/"; then
+              TYPE="docs"
+            elif echo "$files" | grep -qE "test|spec|_test\.go|\.test\.|\.spec\."; then
+              # If mostly test files, likely a bugfix
+              TYPE="bugfix"
+            fi
+          fi
+          
+          # Priority 3: Check PR title and body for keywords
+          if [ -z "$TYPE" ]; then
+            combined_text="$pr_title $pr_body"
+            
+            if echo "$combined_text" | grep -qiE "\b(fix(es|ed)?|bug|issue|closes? #[0-9]+|resolves? #[0-9]+)\b"; then
+              TYPE="bugfix"
+            elif echo "$combined_text" | grep -qiE "\b(refactor(ing)?|reorganiz(e|ing)|restructur(e|ing)|clean(-| )?up)\b"; then
+              TYPE="refactor"
+            elif echo "$combined_text" | grep -qiE "\b(feat(ure)?|add(s|ed|ing)?|new|implement(s|ed|ing)?|enhance(ment)?)\b"; then
+              TYPE="feature"
+            fi
+          fi
+          
+          # Default: feature for code changes
+          if [ -z "$TYPE" ]; then
+            TYPE="feature"
+          fi
+          
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+          echo "label=pr-category:$TYPE" >> "$GITHUB_OUTPUT"
+          echo "📝 PR type detected: $TYPE"
 
       - name: Apply labels
         env:
