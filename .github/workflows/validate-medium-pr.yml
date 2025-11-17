@@ -1,9 +1,12 @@
 name: Validate Medium PR
 
 on:
+  workflow_run:
+    workflows: ["Categorize External PR (Simple)"]
+    types:
+      - completed
   pull_request_target:
     types:
-      - labeled
       - synchronize
 
 permissions:
@@ -15,39 +18,80 @@ permissions:
 jobs:
   validate:
     name: Medium PR Validation
-    # Only run when size:medium label is applied
-    if: contains(github.event.pull_request.labels.*.name, 'size:medium')
+    # Only run for external PRs and when categorization succeeded
+    if: |
+      (github.event.workflow_run.conclusion == 'success' || github.event_name == 'pull_request_target') &&
+      (github.event.pull_request.author_association != 'MEMBER' && github.event.pull_request.author_association != 'OWNER' || github.event_name == 'workflow_run')
     runs-on: ubuntu-latest
     
     steps:
+      - name: Get PR number and check labels
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Get PR number from workflow_run event
+            pr_number=$(gh api "/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" \
+              --jq '.pull_requests[0].number')
+            echo "pr-number=$pr_number" >> "$GITHUB_OUTPUT"
+            
+            # Check if PR has size:medium label
+            labels=$(gh pr view "$pr_number" --repo ${{ github.repository }} --json labels --jq '.labels[].name' | tr '\n' ',')
+            if echo "$labels" | grep -q "size:medium"; then
+              echo "should-run=true" >> "$GITHUB_OUTPUT"
+              echo "✅ PR #$pr_number has size:medium label"
+            else
+              echo "should-run=false" >> "$GITHUB_OUTPUT"
+              echo "⏭️  PR #$pr_number does not have size:medium label, skipping"
+            fi
+          else
+            # pull_request_target event (synchronize)
+            pr_number="${{ github.event.pull_request.number }}"
+            echo "pr-number=$pr_number" >> "$GITHUB_OUTPUT"
+            
+            labels="${{ join(github.event.pull_request.labels.*.name, ',') }}"
+            if echo "$labels" | grep -q "size:medium"; then
+              echo "should-run=true" >> "$GITHUB_OUTPUT"
+              echo "✅ PR #$pr_number has size:medium label"
+            else
+              echo "should-run=false" >> "$GITHUB_OUTPUT"
+              echo "⏭️  PR #$pr_number does not have size:medium label, skipping"
+            fi
+          fi
+
       - name: Checkout repository
+        if: steps.pr-info.outputs.should-run == 'true'
         uses: actions/checkout@v5
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Detect changed areas
+        if: steps.pr-info.outputs.should-run == 'true'
         id: detect-areas
         uses: ./.github/actions/detect-areas
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
 
       - name: Check PR requirements
+        if: steps.pr-info.outputs.should-run == 'true'
         id: check-requirements
         uses: ./.github/actions/check-requirements
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
 
       - name: Verify tests exist
+        if: steps.pr-info.outputs.should-run == 'true'
         id: verify-tests
         uses: ./.github/actions/verify-tests
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
 
       - name: Run comprehensive linting
+        if: steps.pr-info.outputs.should-run == 'true'
         id: lint
         continue-on-error: true
         run: |
@@ -87,6 +131,7 @@ jobs:
           fi
 
       - name: Run comprehensive tests
+        if: steps.pr-info.outputs.should-run == 'true'
         id: tests
         continue-on-error: true
         run: |
@@ -120,6 +165,7 @@ jobs:
           fi
 
       - name: Evaluate validation results
+        if: steps.pr-info.outputs.should-run == 'true'
         id: evaluate
         shell: bash
         env:
@@ -138,9 +184,10 @@ jobs:
           echo "all-passed=$all_passed" >> "$GITHUB_OUTPUT"
 
       - name: Post validation results
+        if: steps.pr-info.outputs.should-run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
           ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
           REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
           MISSING_REQUIREMENTS: ${{ steps.check-requirements.outputs.missing-requirements }}
@@ -231,14 +278,11 @@ Please add comprehensive test coverage for all changes."
           gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "$COMMENT"
 
       - name: Notify squad if validation passed
-        if: steps.evaluate.outputs.all-passed == 'true'
+        if: steps.pr-info.outputs.should-run == 'true' && steps.evaluate.outputs.all-passed == 'true'
         uses: ./.github/actions/notify-squad
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
-          pr-title: ${{ github.event.pull_request.title }}
-          pr-author: ${{ github.event.pull_request.user.login }}
-          pr-url: ${{ github.event.pull_request.html_url }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
           category-size: medium
           category-type: ${{ steps.detect-areas.outputs.primary-area }}
           stage: validation-passed
@@ -246,6 +290,7 @@ Please add comprehensive test coverage for all changes."
           ai-review-summary: Ready for thorough AI review
 
       - name: Set status check
+        if: steps.pr-info.outputs.should-run == 'true'
         env:
           ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
         run: |

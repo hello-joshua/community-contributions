@@ -1,6 +1,10 @@
 name: Validate Large PR
 
 on:
+  workflow_run:
+    workflows: ["Categorize External PR (Simple)"]
+    types:
+      - completed
   pull_request_target:
     types:
       - labeled
@@ -15,14 +19,46 @@ permissions:
 jobs:
   early-alignment:
     name: Request Early Human Alignment
-    # Only run when size:large label is applied AND alignment-approved label is NOT present
+    # Only run for external PRs when size:large label applied AND alignment-approved NOT present
     if: |
-      contains(github.event.pull_request.labels.*.name, 'size:large') &&
-      !contains(github.event.pull_request.labels.*.name, 'alignment-approved')
+      (github.event.workflow_run.conclusion == 'success' || github.event_name == 'pull_request_target')
     runs-on: ubuntu-latest
     
     steps:
+      - name: Get PR number and check labels
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            pr_number=$(gh api "/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" \
+              --jq '.pull_requests[0].number')
+            echo "pr-number=$pr_number" >> "$GITHUB_OUTPUT"
+            
+            labels=$(gh pr view "$pr_number" --repo ${{ github.repository }} --json labels --jq '.labels[].name' | tr '\n' ',')
+            if echo "$labels" | grep -q "size:large" && ! echo "$labels" | grep -q "alignment-approved"; then
+              echo "should-run=true" >> "$GITHUB_OUTPUT"
+              echo "✅ PR #$pr_number has size:large label and needs alignment"
+            else
+              echo "should-run=false" >> "$GITHUB_OUTPUT"
+              echo "⏭️  PR #$pr_number doesn't need early alignment, skipping"
+            fi
+          else
+            pr_number="${{ github.event.pull_request.number }}"
+            echo "pr-number=$pr_number" >> "$GITHUB_OUTPUT"
+            
+            labels="${{ join(github.event.pull_request.labels.*.name, ',') }}"
+            if echo "$labels" | grep -q "size:large" && ! echo "$labels" | grep -q "alignment-approved"; then
+              echo "should-run=true" >> "$GITHUB_OUTPUT"
+              echo "✅ PR #$pr_number has size:large label and needs alignment"
+            else
+              echo "should-run=false" >> "$GITHUB_OUTPUT"
+              echo "⏭️  PR #$pr_number doesn't need early alignment, skipping"
+            fi
+          fi
+
       - name: Checkout repository
+        if: steps.pr-info.outputs.should-run == 'true'
         uses: actions/checkout@v5
         with:
           persist-credentials: false
@@ -32,12 +68,12 @@ jobs:
         uses: ./.github/actions/detect-areas
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
 
       - name: Post alignment request comment
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
           AREAS: ${{ steps.detect-areas.outputs.areas }}
           PRIMARY_AREA: ${{ steps.detect-areas.outputs.primary-area }}
         run: |
@@ -81,7 +117,7 @@ For large PRs, we request early human review **before** running extensive automa
       - name: Add awaiting-alignment label
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
         run: |
           gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "awaiting-alignment"
           echo "✅ Added awaiting-alignment label"
@@ -90,7 +126,7 @@ For large PRs, we request early human review **before** running extensive automa
         uses: ./.github/actions/notify-squad
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
           pr-title: ${{ github.event.pull_request.title }}
           pr-author: ${{ github.event.pull_request.user.login }}
           pr-url: ${{ github.event.pull_request.html_url }}
@@ -118,7 +154,7 @@ For large PRs, we request early human review **before** running extensive automa
       - name: Remove awaiting-alignment label
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
         run: |
           gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --remove-label "awaiting-alignment" || true
 
@@ -127,21 +163,21 @@ For large PRs, we request early human review **before** running extensive automa
         uses: ./.github/actions/detect-areas
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
 
       - name: Check PR requirements
         id: check-requirements
         uses: ./.github/actions/check-requirements
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
 
       - name: Verify tests exist
         id: verify-tests
         uses: ./.github/actions/verify-tests
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
 
       - name: Run basic linting
         id: lint
@@ -235,7 +271,7 @@ For large PRs, we request early human review **before** running extensive automa
       - name: Post validation results
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
           ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
           REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
           MISSING_REQUIREMENTS: ${{ steps.check-requirements.outputs.missing-requirements }}
@@ -330,7 +366,7 @@ Please ensure test coverage for all significant changes."
         uses: ./.github/actions/notify-squad
         with:
           github-token: ${{ github.token }}
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ steps.pr-info.outputs.pr-number }}
           pr-title: ${{ github.event.pull_request.title }}
           pr-author: ${{ github.event.pull_request.user.login }}
           pr-url: ${{ github.event.pull_request.html_url }}
