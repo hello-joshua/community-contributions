@@ -38,18 +38,26 @@ jobs:
           seven_days_ago=$(python3 -c 'from datetime import datetime, timedelta; print((datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
           echo "Fetching PRs created after: $seven_days_ago"
           
+          # Test gh authentication first
+          echo "Testing gh authentication..."
+          gh auth status || { echo "ERROR: gh auth failed"; exit 1; }
+          
           # Fetch open PRs from grafana/grafana
+          echo "Fetching PRs from grafana/grafana..."
           if ! gh pr list \
             --repo grafana/grafana \
             --state open \
             --limit 100 \
             --json number,title,body,author,createdAt,labels \
-            --jq "[.[] | select(.createdAt >= \"$seven_days_ago\")] | .[:20]" \
-            > /tmp/upstream_prs.json; then
-            echo "ERROR: gh pr list failed. See CLI output above."
-            cat /tmp/upstream_prs.json 2>/dev/null || true
+            > /tmp/all_prs.json; then
+            echo "ERROR: gh pr list failed. Check authentication and permissions."
             exit 1
           fi
+          
+          # Filter PRs by date using jq with proper variable passing
+          echo "Filtering PRs by date..."
+          jq --arg date "$seven_days_ago" '[.[] | select(.createdAt >= $date)] | .[:20]' \
+            /tmp/all_prs.json > /tmp/upstream_prs.json
           
           echo "Fetched PRs from upstream"
           cat /tmp/upstream_prs.json | jq 'length'
