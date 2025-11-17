@@ -147,12 +147,14 @@ jobs:
             # Push branch
             git push origin "$branch_name"
             
-            # Create PR with broken URL in description
-            pr_description="$pr_body
-
----
-
-Automated test copy from upstream PR ${pr_number}"
+            # Create PR description file to avoid quote issues
+            {
+              echo "$pr_body"
+              echo ""
+              echo "---"
+              echo ""
+              echo "Automated test copy from upstream PR ${pr_number}"
+            } > /tmp/pr_description.txt
             
             # Create PR with prefix
             gh pr create \
@@ -160,7 +162,7 @@ Automated test copy from upstream PR ${pr_number}"
               --base main \
               --head "$branch_name" \
               --title "Ext-PR-Copy: $pr_title" \
-              --body "$pr_description" || echo "PR creation failed, continuing"
+              --body-file /tmp/pr_description.txt || echo "PR creation failed, continuing"
             
             # Update tracker
             jq --arg pr "$pr_number" '.copied_prs += [$pr | tonumber]' .github/pr-copy-tracker.json > /tmp/tracker.json
