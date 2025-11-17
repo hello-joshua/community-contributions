@@ -31,8 +31,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PR_COPY_BOT_TOKEN }}
         run: |
-          # Get PRs from last 7 days
-          seven_days_ago=$(date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ')
+          # Debug: Check gh CLI version
+          gh --version
+          
+          # Get PRs from last 7 days using Python for portability
+          seven_days_ago=$(python3 -c 'from datetime import datetime, timedelta; print((datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+          echo "Fetching PRs created after: $seven_days_ago"
           
           # Fetch open PRs from grafana/grafana
           if ! gh pr list \
@@ -43,6 +47,7 @@ jobs:
             --jq "[.[] | select(.createdAt >= \"$seven_days_ago\")] | .[:20]" \
             > /tmp/upstream_prs.json; then
             echo "ERROR: gh pr list failed. See CLI output above."
+            cat /tmp/upstream_prs.json 2>/dev/null || true
             exit 1
           fi
           
