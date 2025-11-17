@@ -39,31 +39,31 @@ EOF
 if [ "$SIZE" = "small" ]; then
   cat >> /tmp/pr-analysis-comment.md << 'EOF'
 **Review Process**
-- Lightweight AI review (critical issues only)
-- Human review for final approval
-- Fast-track validation for simple changes
+1. Lightweight AI review (critical issues only)
+1. Human review for final approval
+1. Merge once approved
 
-Your small PR will go through streamlined validation to get you feedback quickly!
+Your small PR will go through streamlined validation.
 
 EOF
 elif [ "$SIZE" = "medium" ]; then
   cat >> /tmp/pr-analysis-comment.md << 'EOF'
 **Review Process**
-- Comprehensive AI review (code quality, security, best practices)
-- Automatically routed to the relevant squad based on affected areas
-- Human review required before merge
-- Detailed feedback on implementation
+1. Comprehensive AI review (code quality, security, best practices)
+1. Automatically routed to the relevant squad based on affected areas
+1. Human review required before merge
+1. Detailed feedback on implementation
 
-Your medium PR will receive thorough validation and will be assigned to the appropriate team for review.
+Your medium PR will receive thorough validation and be assigned to the appropriate team for review.
 
 EOF
 elif [ "$SIZE" = "large" ]; then
   cat >> /tmp/pr-analysis-comment.md << 'EOF'
 **Review Process**
-- **Early alignment checkpoint**: A squad member will review your approach first
-- Please be ready to discuss the implementation strategy
-- Once aligned, comprehensive validation will run
-- Detailed human code review after alignment
+1. **Early alignment checkpoint**: A squad member will review your approach first
+1. Discussion about implementation strategy
+1. Once aligned, comprehensive validation will run
+1. Detailed human code review after alignment
 
 ⚠️ **Important for Large PRs**: We want to ensure your effort is well-directed before you invest significant time. A maintainer will review the architectural approach and provide feedback. Once we add the `alignment-approved` label, automated validation will proceed.
 
