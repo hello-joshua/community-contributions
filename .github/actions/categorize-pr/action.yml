@@ -100,14 +100,19 @@ runs:
         
         # Fallback to file path analysis if no type labels exist
         if [ -z "$TYPE" ]; then
+          # Strip HTML comments and unfilled template placeholders from PR body
+          cleaned_body=$(echo "$PR_BODY" | sed 's/<!--.*-->//g')
+          cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*$//g')
+          cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*\n/\n/g')
+          
           if echo "$FILE_PATHS" | grep -q "docs/\|contribute/\|\.md$"; then
             TYPE="docs"
           elif echo "$FILE_PATHS" | grep -q "test\|spec"; then
             # If mostly test files, might be bugfix
             TYPE="bugfix"
-          elif echo "$PR_BODY" | grep -qi "fix\|bug\|issue"; then
+          elif echo "$cleaned_body" | grep -qi "fix\|bug\|issue"; then
             TYPE="bugfix"
-          elif echo "$PR_BODY" | grep -qi "refactor\|reorganiz"; then
+          elif echo "$cleaned_body" | grep -qi "refactor\|reorganiz"; then
             TYPE="refactor"
           else
             # Default to feature for code changes

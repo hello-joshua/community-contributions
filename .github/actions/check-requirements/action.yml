@@ -68,6 +68,11 @@ runs:
       run: |
         missing=()
         
+        # Strip HTML comments and unfilled template placeholders from PR body
+        cleaned_body=$(echo "$PR_BODY" | sed 's/<!--.*-->//g')
+        cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*$//g')
+        cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*\n/\n/g')
+        
         # Check 1: PR has a meaningful description (not just template)
         if [ ${#PR_BODY} -lt 50 ] || echo "$PR_BODY" | grep -q "<!-- Please provide a clear and concise description"; then
           echo "has-description=false" >> "$GITHUB_OUTPUT"
@@ -77,8 +82,8 @@ runs:
           echo "✅ PR has a proper description"
         fi
         
-        # Check 2: PR references an issue
-        if echo "$PR_BODY" | grep -qiE "(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved) #[0-9]+"; then
+        # Check 2: PR references an issue (use cleaned body to avoid matching template)
+        if echo "$cleaned_body" | grep -qiE "(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved) #[0-9]+"; then
           echo "has-issue-reference=true" >> "$GITHUB_OUTPUT"
           echo "✅ PR references an issue"
         else

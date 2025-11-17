@@ -94,7 +94,15 @@ jobs:
           
           # Priority 3: Check PR title and body for keywords
           if [ -z "$TYPE" ]; then
-            combined_text="$pr_title $pr_body"
+            # Strip HTML comments from PR body (template instructions)
+            cleaned_body=$(echo "$pr_body" | sed 's/<!--.*-->//g')
+            
+            # Remove unfilled template placeholders (e.g., "Closes #" or "Fixes #" without a number)
+            # This prevents template boilerplate from being classified as bug reports
+            cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*$//g')
+            cleaned_body=$(echo "$cleaned_body" | sed -E 's/\b(Closes|closes|Fixes|fixes|Resolves|resolves) #[[:space:]]*\n/\n/g')
+            
+            combined_text="$pr_title $cleaned_body"
             
             if echo "$combined_text" | grep -qiE "\b(fix(es|ed)?|bug|issue|closes? #[0-9]+|resolves? #[0-9]+)\b"; then
               TYPE="bugfix"
