@@ -136,6 +136,14 @@ jobs:
             echo "Fetching code changes from PR #${pr_number}..."
             gh pr diff "$pr_number" --repo grafana/grafana > /tmp/pr_${pr_number}.patch
             
+            # Check if PR modifies workflow files (requires 'workflow' scope on PAT)
+            if grep -q "^diff --git a/.github/workflows/" /tmp/pr_${pr_number}.patch; then
+              echo "Skipping PR #${pr_number} - modifies workflow files (requires workflow scope)"
+              echo "$pr_number" >> /tmp/skipped_prs.txt
+              git checkout main
+              continue
+            fi
+            
             echo "Applying changes..."
             git apply /tmp/pr_${pr_number}.patch || echo "Patch apply had issues, continuing..."
             
