@@ -220,6 +220,8 @@ jobs:
             echo "No changes to tracker"
           else
             git commit -m "Bot: Update PR copy tracker"
+            # Pull any remote changes before pushing to avoid conflicts
+            git pull --rebase origin main
             git push origin main
             echo "SUCCESS: Tracker updated"
           fi
