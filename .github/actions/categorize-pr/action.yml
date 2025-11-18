@@ -120,29 +120,28 @@ runs:
               file_context="Modified files: tests. "
             fi
             
-            # Escape for JSON
-            pr_title_json=$(echo "$PR_TITLE" | jq -Rs .)
-            cleaned_body_json=$(echo "$cleaned_body" | jq -Rs .)
+            # Build JSON payload using jq to avoid escaping issues
+            user_content="${file_context}Title: ${PR_TITLE}\n\nDescription: ${cleaned_body}"
+            
+            payload=$(jq -n \
+              --arg model "gpt-4o-mini" \
+              --arg system_prompt "Classify this PR into ONE category: docs, bugfix, feature, or refactor.\n\nRules:\n- docs: Documentation, README, comments, markdown\n- bugfix: Fixes bugs, errors, crashes, regressions\n- refactor: Code restructuring without new behavior\n- feature: New functionality, enhancements, improvements\n\nRespond with ONLY the category word, nothing else." \
+              --arg user_msg "$user_content" \
+              '{
+                model: $model,
+                messages: [
+                  {role: "system", content: $system_prompt},
+                  {role: "user", content: $user_msg}
+                ],
+                temperature: 0.2,
+                max_tokens: 5
+              }')
             
             # Call OpenAI API
             api_response=$(curl -s -X POST https://api.openai.com/v1/chat/completions \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
-              -d "{
-                \"model\": \"gpt-4o-mini\",
-                \"messages\": [
-                  {
-                    \"role\": \"system\",
-                    \"content\": \"Classify this PR into ONE category: docs, bugfix, feature, or refactor.\\n\\nRules:\\n- docs: Documentation, README, comments, markdown\\n- bugfix: Fixes bugs, errors, crashes, regressions\\n- refactor: Code restructuring without new behavior\\n- feature: New functionality, enhancements, improvements\\n\\nRespond with ONLY the category word, nothing else.\"
-                  },
-                  {
-                    \"role\": \"user\",
-                    \"content\": \"${file_context}Title: $pr_title_json\\n\\nDescription: $cleaned_body_json\"
-                  }
-                ],
-                \"temperature\": 0.2,
-                \"max_tokens\": 5
-              }")
+              -d "$payload")
             
             # Debug: show API response (for troubleshooting)
             echo "API response: $api_response"
