@@ -100,8 +100,9 @@ runs:
         
         # Fallback to file path analysis if no type labels exist
         if [ -z "$TYPE" ]; then
-          # Strip HTML comments and unfilled template placeholders from PR body
-          cleaned_body=$(echo "$PR_BODY" | sed 's/<!--.*-->//g')
+          # Strip HTML comments (including multi-line) from PR body using perl
+          # perl's /s flag makes . match newlines, /g is global
+          cleaned_body=$(echo "$PR_BODY" | perl -pe 's/<!--.*?-->//gs')
           
           # Strip common template questions and checklists to avoid false positives
           cleaned_body=$(echo "$cleaned_body" | sed -E 's/What is this feature\?.*//gi')
