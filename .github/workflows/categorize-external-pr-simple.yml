@@ -96,13 +96,55 @@ jobs:
           TYPE: ${{ steps.categorize.outputs.type }}
           SIZE: ${{ steps.categorize.outputs.size }}
         run: |
+          # Map internal type names to actual label names
+          case "$TYPE" in
+            bugfix) DISPLAY_TYPE="bug" ;;
+            feature) DISPLAY_TYPE="feature" ;;
+            docs) DISPLAY_TYPE="docs" ;;
+            *) DISPLAY_TYPE="$TYPE" ;;
+          esac
+          
+          # Check for multiple type labels
+          all_labels=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json labels --jq '.labels[].name')
+          type_labels=$(echo "$all_labels" | grep -E "^type/(bug|feature|docs)$" || true)
+          type_count=$(echo "$type_labels" | grep -v '^$' | wc -l)
+          
           {
             echo "## Label updated"
             echo ""
             echo "The type label has been updated and now matches our AI classification."
             echo ""
-            echo "Current classification: \`type/$TYPE\` (size: $SIZE)"
+            echo "Current classification: \`type/$DISPLAY_TYPE\` (size: $SIZE)"
             echo ""
+            
+            if [ "$type_count" -gt 1 ]; then
+              echo "**Note:** Multiple type labels detected. Please remove conflicting labels to avoid confusion:"
+              echo ""
+              echo "$type_labels" | while read -r label; do
+                if [ -n "$label" ]; then
+                  # Check if this is NOT the correct label based on TYPE
+                  case "$TYPE" in
+                    bugfix)
+                      if [ "$label" != "type/bug" ]; then
+                        echo "- Remove: \`$label\`"
+                      fi
+                      ;;
+                    feature)
+                      if [ "$label" != "type/feature" ]; then
+                        echo "- Remove: \`$label\`"
+                      fi
+                      ;;
+                    docs)
+                      if [ "$label" != "type/docs" ]; then
+                        echo "- Remove: \`$label\`"
+                      fi
+                      ;;
+                  esac
+                fi
+              done
+              echo ""
+            fi
+            
             echo "The PR will now follow the appropriate validation workflow for this type and size."
           } > /tmp/correction-comment.md
           
@@ -117,20 +159,35 @@ jobs:
           LABEL_TYPE: ${{ steps.categorize.outputs.disagreement-label }}
           AI_TYPE: ${{ steps.categorize.outputs.disagreement-ai }}
         run: |
+          # Map internal type names to actual label names
+          case "$LABEL_TYPE" in
+            bugfix) DISPLAY_LABEL="bug" ;;
+            feature) DISPLAY_LABEL="feature" ;;
+            docs) DISPLAY_LABEL="docs" ;;
+            *) DISPLAY_LABEL="$LABEL_TYPE" ;;
+          esac
+          
+          case "$AI_TYPE" in
+            bugfix) DISPLAY_AI="bug" ;;
+            feature) DISPLAY_AI="feature" ;;
+            docs) DISPLAY_AI="docs" ;;
+            *) DISPLAY_AI="$AI_TYPE" ;;
+          esac
+          
           {
             echo "## Type classification disagreement"
             echo ""
             echo "Our AI analysis suggests a different classification than the existing label:"
             echo ""
-            echo "Existing label: \`type/$LABEL_TYPE\` (currently applied)"
-            echo "AI suggestion: \`type/$AI_TYPE\`"
+            echo "Existing label: \`type/$DISPLAY_LABEL\` (currently applied)"
+            echo "AI suggestion: \`type/$DISPLAY_AI\`"
             echo ""
             echo "What this means:"
             echo "- The existing label will be kept (safer default)"
             echo "- This is informational for maintainer awareness"
             echo "- AI analyzed: title, description, and changed files"
             echo ""
-            echo "Action: If AI is correct, update label to \`type/$AI_TYPE\`"
+            echo "Action: If AI is correct, update label to \`type/$DISPLAY_AI\`"
             echo ""
             echo "This check helps catch labeling errors to ensure the PR gets into the right validation workflow."
           } > /tmp/disagreement-warning.md
