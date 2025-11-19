@@ -63,7 +63,7 @@ jobs:
           existing_labels=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json labels --jq '.labels[].name')
           
           for label in $existing_labels; do
-            if [[ "$label" =~ ^(pr-category:|size:) ]]; then
+            if [[ "$label" =~ ^(pr-category:|size:|type/bug$|type/feature$|type/docs$) ]]; then
               echo "Removing old label: $label"
               gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --remove-label "$label" || true
             fi

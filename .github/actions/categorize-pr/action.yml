@@ -104,6 +104,7 @@ runs:
         
         # Determine type from existing labels first
         # Priority: bug > feature > docs (refactor removed - too rare for external PRs)
+        # Using Grafana's standard label format: type/bug, type/feature, type/docs
         LABEL_TYPE=""
         
         # Add commas for exact matching
@@ -113,7 +114,7 @@ runs:
           LABEL_TYPE="bugfix"
         elif echo "$labels_with_bounds" | grep -q ",type/feature,"; then
           LABEL_TYPE="feature"
-        elif echo "$labels_with_bounds" | grep -q ",type/docs," || echo "$labels_with_bounds" | grep -q ",area/docs,"; then
+        elif echo "$labels_with_bounds" | grep -qE ",(type/docs|area/docs),"; then
           LABEL_TYPE="docs"
         fi
         
@@ -200,7 +201,22 @@ runs:
         fi
         
         echo "type=$TYPE" >> "$GITHUB_OUTPUT"
-        echo "type-label=pr-category:$TYPE" >> "$GITHUB_OUTPUT"
+        
+        # Map internal type names to Grafana's standard label format
+        case "$TYPE" in
+          bugfix)
+            echo "type-label=type/bug" >> "$GITHUB_OUTPUT"
+            ;;
+          feature)
+            echo "type-label=type/feature" >> "$GITHUB_OUTPUT"
+            ;;
+          docs)
+            echo "type-label=type/docs" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "type-label=type/feature" >> "$GITHUB_OUTPUT"
+            ;;
+        esac
         
         echo "Categorized as: size=$SIZE, type=$TYPE"
 
