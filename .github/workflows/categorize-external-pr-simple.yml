@@ -79,14 +79,65 @@ jobs:
         if: github.event.action != 'labeled'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TYPE: ${{ steps.categorize.outputs.type }}
         run: |
           chmod +x .github/scripts/post-pr-comment.sh
           .github/scripts/post-pr-comment.sh \
-            "${{ github.event.pull_request.number }}" \
+            "$PR_NUMBER" \
             "${{ steps.categorize.outputs.size }}" \
-            "${{ steps.categorize.outputs.type }}" \
+            "$TYPE" \
             "${{ github.repository }}"
           echo "PR categorized and comment posted"
+          
+          # Check for multiple type labels and append warning if needed
+          all_labels=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json labels --jq '.labels[].name')
+          type_labels=$(echo "$all_labels" | grep -E "^type/(bug|feature|docs)$" || true)
+          type_count=$(echo "$type_labels" | grep -v '^$' | wc -l)
+          
+          if [ "$type_count" -gt 1 ]; then
+            # Map internal type name to label name
+            case "$TYPE" in
+              bugfix) DISPLAY_TYPE="bug" ;;
+              feature) DISPLAY_TYPE="feature" ;;
+              docs) DISPLAY_TYPE="docs" ;;
+              *) DISPLAY_TYPE="$TYPE" ;;
+            esac
+            
+            {
+              echo ""
+              echo "---"
+              echo ""
+              echo "**Note:** Multiple type labels detected on this PR. Using \`type/$DISPLAY_TYPE\` based on priority (bug > feature > docs)."
+              echo ""
+              echo "Please remove conflicting labels to avoid confusion:"
+              echo ""
+              echo "$type_labels" | while read -r label; do
+                if [ -n "$label" ]; then
+                  case "$TYPE" in
+                    bugfix)
+                      if [ "$label" != "type/bug" ]; then
+                        echo "- Remove: \`$label\`"
+                      fi
+                      ;;
+                    feature)
+                      if [ "$label" != "type/feature" ]; then
+                        echo "- Remove: \`$label\`"
+                      fi
+                      ;;
+                    docs)
+                      if [ "$label" != "type/docs" ]; then
+                        echo "- Remove: \`$label\`"
+                      fi
+                      ;;
+                  esac
+                fi
+              done
+            } > /tmp/multiple-labels-warning.md
+            
+            gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body-file /tmp/multiple-labels-warning.md
+            echo "Posted multiple labels warning"
+          fi
 
       - name: Post label correction confirmation
         if: github.event.action == 'labeled' && steps.categorize.outputs.disagreement == 'false'
