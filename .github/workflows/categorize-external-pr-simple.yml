@@ -15,8 +15,7 @@ permissions:
 jobs:
   categorize:
     name: Categorize PR by Size and Type
-    # Only run for your collaborator bot account, not random external PRs
-    if: github.event.pull_request.user.login == 'hello-joshua'
+    # Run for all PRs (for testing purposes - later restrict to external only)
     runs-on: ubuntu-latest
     
     steps:
