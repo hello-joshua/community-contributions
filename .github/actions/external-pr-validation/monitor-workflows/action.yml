@@ -63,27 +63,27 @@ runs:
         results=()
         summary_lines=()
         
-        # Check each workflow
+        # Check each workflow using the checks API (which has the actual status check names)
         IFS=',' read -ra WORKFLOW_ARRAY <<< "$WORKFLOWS"
         for workflow_name in "${WORKFLOW_ARRAY[@]}"; do
           echo "Checking workflow: $workflow_name"
           
-          # Get latest workflow run for this PR
-          workflow_status=$(gh api \
-            "/repos/${{ github.repository }}/actions/runs" \
-            --jq ".workflow_runs[] | select(.head_sha == \"$pr_sha\" and .name == \"$workflow_name\") | {status: .status, conclusion: .conclusion} | @json" \
+          # Get check status for this PR using checks API
+          check_status=$(gh api \
+            "/repos/${{ github.repository }}/commits/$pr_sha/check-runs" \
+            --jq ".check_runs[] | select(.name == \"$workflow_name\") | {status: .status, conclusion: .conclusion} | @json" \
             | head -n 1)
           
-          if [ -z "$workflow_status" ]; then
-            # Workflow hasn't run yet
+          if [ -z "$check_status" ]; then
+            # Check hasn't run yet
             status="pending"
             conclusion="none"
             results+=("{\"workflow\":\"$workflow_name\",\"status\":\"pending\",\"conclusion\":\"none\"}")
             summary_lines+=("- [ ] $workflow_name (pending)")
             all_passed=false
           else
-            status=$(echo "$workflow_status" | jq -r '.status')
-            conclusion=$(echo "$workflow_status" | jq -r '.conclusion')
+            status=$(echo "$check_status" | jq -r '.status')
+            conclusion=$(echo "$check_status" | jq -r '.conclusion')
             
             if [ "$status" = "completed" ]; then
               if [ "$conclusion" = "success" ]; then
@@ -91,7 +91,7 @@ runs:
                 summary_lines+=("- [x] $workflow_name")
               elif [ "$conclusion" = "failure" ]; then
                 results+=("{\"workflow\":\"$workflow_name\",\"status\":\"completed\",\"conclusion\":\"failure\"}")
-                summary_lines+=("- [ ] $workflow_name (failed)")
+                summary_lines+=("- [ ] ~~$workflow_name~~ **FAILED**")
                 all_passed=false
               else
                 # skipped, cancelled, etc
