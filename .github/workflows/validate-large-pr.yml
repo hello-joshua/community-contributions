@@ -128,28 +128,40 @@ jobs:
               ;;
           esac
           
-          # Build comment using printf to avoid YAML heredoc issues
-          printf "## %s Large %s PR - Early Alignment Required\n\n" "$TYPE_EMOJI" "$TYPE_NAME" > /tmp/alignment-comment.md
-          printf "Thank you for this substantial contribution!\n\n" >> /tmp/alignment-comment.md
-          printf "### Why early alignment?\n\n" >> /tmp/alignment-comment.md
-          printf "For large PRs, we request early human review **before** running extensive automated validation. This helps:\n" >> /tmp/alignment-comment.md
-          printf "- Ensure the approach aligns with project goals\n" >> /tmp/alignment-comment.md
-          printf "- Avoid wasted effort on misaligned implementations\n" >> /tmp/alignment-comment.md
-          printf "- Provide early feedback to guide your work\n" >> /tmp/alignment-comment.md
-          printf "- Save everyone time!\n\n" >> /tmp/alignment-comment.md
-          printf "### %s\n\n" "$ALIGNMENT_FOCUS" >> /tmp/alignment-comment.md
-          printf "### Next steps:\n\n" >> /tmp/alignment-comment.md
-          printf "**For you (the contributor):**\n" >> /tmp/alignment-comment.md
-          printf "1. Please wait for a squad member to review the approach\n" >> /tmp/alignment-comment.md
-          printf "2. Be ready to discuss the implementation strategy\n" >> /tmp/alignment-comment.md
-          printf "3. Feel free to add high-level notes about your approach\n\n" >> /tmp/alignment-comment.md
-          printf "**For squad members:**\n" >> /tmp/alignment-comment.md
-          printf "1. Please review this PR for alignment\n" >> /tmp/alignment-comment.md
-          printf "2. Discuss the approach with the contributor\n" >> /tmp/alignment-comment.md
-          printf "3. Once aligned, add the \`alignment-approved\` label\n\n" >> /tmp/alignment-comment.md
-          printf "---\n\n" >> /tmp/alignment-comment.md
-          printf "A squad notification has been sent. Thank you for your patience!\n\n" >> /tmp/alignment-comment.md
-          printf "*This is part of our large PR workflow to ensure early alignment and efficient collaboration.*\n" >> /tmp/alignment-comment.md
+          # Build comment using echo to avoid printf flag issues with dashes
+          {
+            echo "## $TYPE_EMOJI Large $TYPE_NAME PR - Early Alignment Required"
+            echo ""
+            echo "Thank you for this substantial contribution!"
+            echo ""
+            echo "### Why early alignment?"
+            echo ""
+            echo "For large PRs, we request early human review **before** running extensive automated validation. This helps:"
+            echo "- Ensure the approach aligns with project goals"
+            echo "- Avoid wasted effort on misaligned implementations"
+            echo "- Provide early feedback to guide your work"
+            echo "- Save everyone time!"
+            echo ""
+            echo "### $ALIGNMENT_FOCUS"
+            echo ""
+            echo "### Next steps:"
+            echo ""
+            echo "**For you (the contributor):**"
+            echo "1. Please wait for a squad member to review the approach"
+            echo "2. Be ready to discuss the implementation strategy"
+            echo "3. Feel free to add high-level notes about your approach"
+            echo ""
+            echo "**For squad members:**"
+            echo "1. Please review this PR for alignment"
+            echo "2. Discuss the approach with the contributor"
+            echo "3. Once aligned, add the \`alignment-approved\` label"
+            echo ""
+            echo "---"
+            echo ""
+            echo "A squad notification has been sent. Thank you for your patience!"
+            echo ""
+            echo "*This is part of our large PR workflow to ensure early alignment and efficient collaboration.*"
+          } > /tmp/alignment-comment.md
           
           gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body-file /tmp/alignment-comment.md
           echo "✅ Posted alignment request comment"
