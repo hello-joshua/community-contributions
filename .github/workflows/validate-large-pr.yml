@@ -152,6 +152,7 @@ jobs:
           echo "✅ Posted alignment request comment"
 
       - name: Add awaiting-alignment label
+        if: steps.pr-info.outputs.should-run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
