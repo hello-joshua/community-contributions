@@ -1,6 +1,4 @@
 <!-- DOCS SECTION -->
-## 📝 Large Documentation PR - Alignment & Validation
-
 Hey! Thanks for this substantial documentation contribution!
 
 ### Phase 1: Early Alignment
@@ -29,8 +27,6 @@ For large documentation changes, we first want to align on the structure and app
 ---
 
 <!-- BUGFIX SECTION -->
-## 🐛 Large Bugfix PR - Alignment & Validation
-
 Thanks for tackling this significant fix!
 
 ### Phase 1: Early Alignment
@@ -61,8 +57,6 @@ For large fixes, we want to ensure the approach is sound before detailed validat
 ---
 
 <!-- FEATURE SECTION -->
-## ✨ Large Feature PR - Alignment & Validation
-
 Excited about this significant feature!
 
 ### Phase 1: Early Alignment

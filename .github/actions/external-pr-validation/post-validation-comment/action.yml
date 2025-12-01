@@ -85,16 +85,32 @@ runs:
         WORKFLOW_SUMMARY: ${{ inputs.workflow-summary }}
         AI_FEEDBACK: ${{ inputs.ai-feedback }}
       run: |
-        # Map type to name
+        # Map type to name and emoji
         case "$PR_TYPE" in
-          docs) TYPE_NAME="Documentation" ;;
-          bugfix) TYPE_NAME="Bugfix" ;;
-          feature) TYPE_NAME="Feature" ;;
+          docs) 
+            TYPE_NAME="Documentation"
+            TYPE_EMOJI="📝"
+            ;;
+          bugfix) 
+            TYPE_NAME="Bugfix"
+            TYPE_EMOJI="🐛"
+            ;;
+          feature) 
+            TYPE_NAME="Feature"
+            TYPE_EMOJI="✨"
+            ;;
         esac
         
-        # Build the comment
+        # Set header suffix based on size
+        if [ "$PR_SIZE" = "large" ]; then
+          HEADER_SUFFIX="Alignment & Validation"
+        else
+          HEADER_SUFFIX="What We're Checking"
+        fi
+        
+        # Build the comment with consolidated header
         cat > /tmp/validation-comment.md <<EOF
-        ## ${TYPE_NAME} PR Validation (${PR_SIZE})
+        ## ${TYPE_EMOJI} ${TYPE_NAME} PR (${PR_SIZE}) - ${HEADER_SUFFIX}
         
         ${TEMPLATE_SECTION}
         

@@ -1,6 +1,4 @@
 <!-- DOCS SECTION -->
-## 📝 Documentation PR - What We're Checking
-
 Hey! Thanks for improving our docs!
 
 ### Automated Checks (we monitor these)
@@ -16,8 +14,6 @@ Hey! Thanks for improving our docs!
 ---
 
 <!-- BUGFIX SECTION -->
-## 🐛 Bugfix PR - What We're Checking
-
 Thanks for fixing this!
 
 ### Automated Checks (we monitor these)
@@ -37,8 +33,6 @@ Thanks for fixing this!
 ---
 
 <!-- FEATURE SECTION -->
-## ✨ Feature PR - What We're Checking
-
 Excited about this feature!
 
 ### Automated Checks (we monitor these)
