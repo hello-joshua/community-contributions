@@ -1,6 +1,6 @@
 #!/bin/bash
-# Script to post automated PR categorization comment
-# Usage: post-pr-comment.sh <pr_number> <size> <type> <repo>
+# Post initial categorization comment for external PRs
+# Usage: post-pr-comment.sh <pr-number> <size> <type> <repository>
 
 set -e
 
@@ -9,89 +9,86 @@ SIZE="$2"
 TYPE="$3"
 REPO="$4"
 
-# Start building the comment
-cat > /tmp/pr-analysis-comment.md << 'EOF'
-## Automated PR analysis
-
-Thank you for your contribution to Grafana! We want to make it easier for both community contributors and engineers, so we're going to help you get your PR super ready before human review so your chances of getting it merged increase.
-
-Your PR has been categorized based on its size and type:
-
-| Category | Value |
-|----------|-------|
-| **Size** | __SIZE__ |
-| **Type** | __TYPE__ |
-
-EOF
-
-# Add override message if applicable (only for large PRs with AI override)
-if [ -n "$OVERRIDE_REASON" ] && [ "$OVERRIDE_REASON" != "" ]; then
-  cat >> /tmp/pr-analysis-comment.md << EOF
-
-> **Note:** This PR was originally labeled as \`type/$ORIGINAL_LABEL\` but appears to be a $AI_CLASSIFIED PR with documentation updates. Based on AI analysis and PR size, we've classified it as \`type/$AI_CLASSIFIED\` for appropriate validation. If you disagree, a maintainer can manually update the labels (see correction instructions below).
-
-EOF
+if [ -z "$PR_NUMBER" ] || [ -z "$SIZE" ] || [ -z "$TYPE" ] || [ -z "$REPO" ]; then
+  echo "Usage: $0 <pr-number> <size> <type> <repository>"
+  exit 1
 fi
 
-# Add size-specific Review Process section
-if [ "$SIZE" = "small" ]; then
-  cat >> /tmp/pr-analysis-comment.md << 'EOF'
-**Review process**
-1. Automated validation (linting, code formatting, tests, requirements)
-1. AI review
-1. Human review for final approval
+# Map type for display
+case "$TYPE" in
+  docs)
+    TYPE_EMOJI="📝"
+    TYPE_NAME="Documentation"
+    ;;
+  bugfix)
+    TYPE_EMOJI="🐛"
+    TYPE_NAME="Bugfix"
+    ;;
+  feature)
+    TYPE_EMOJI="✨"
+    TYPE_NAME="Feature"
+    ;;
+  *)
+    TYPE_EMOJI="📦"
+    TYPE_NAME="$TYPE"
+    ;;
+esac
 
-EOF
-elif [ "$SIZE" = "medium" ]; then
-  cat >> /tmp/pr-analysis-comment.md << 'EOF'
-**Review process**
-1. Automated validation (linting, code formatting, tests, requirements)
-1. Comprehensive AI review (code quality, security, best practices)
-1. Automatically routed to the relevant squad based on affected areas
-1. Human review required before merge
+# Map size for display
+case "$SIZE" in
+  small)
+    SIZE_EMOJI="🟢"
+    TIMELINE="1-2 days"
+    ;;
+  medium)
+    SIZE_EMOJI="🟡"
+    TIMELINE="2-5 days"
+    ;;
+  large)
+    SIZE_EMOJI="🔴"
+    TIMELINE="1-2 weeks (includes alignment phase)"
+    ;;
+  *)
+    SIZE_EMOJI="⚪"
+    TIMELINE="varies"
+    ;;
+esac
 
-EOF
-elif [ "$SIZE" = "large" ]; then
-  cat >> /tmp/pr-analysis-comment.md << 'EOF'
-**Review process**
-1. Early alignment checkpoint: A squad member reviews your approach first
-1. Discussion about implementation strategy
-1. Once aligned, comprehensive validation runs
-1. Detailed human code review after alignment
+# Generate comment
+cat > /tmp/categorization-comment.md <<EOF
+## ${TYPE_EMOJI} PR Categorized: ${TYPE_NAME} ${SIZE_EMOJI} (Size: ${SIZE})
 
-⚠️ **Important for large PRs**: We want to ensure your effort is well-directed before you invest significant time. A maintainer will review the architectural approach and provide feedback. Once we add the `alignment-approved` label, automated validation will proceed.
+Thanks for your contribution! We've categorized your PR to provide the right level of validation.
 
-EOF
-fi
+### What Happens Next
 
-# Add common footer sections
-cat >> /tmp/pr-analysis-comment.md << 'EOF'
+1. **Automated checks** will run (we monitor existing CI/CD, no duplicates!)
+2. **You'll get a checklist** showing what's being validated
+3. **Our AI companion** will provide friendly feedback on code quality and tests
+4. **A human reviewer** will provide final approval
 
-**To correct this categorization**
+### Expected Timeline
 
-If the size or type categorization seems incorrect, a maintainer can update it by adding the correct labels:
-- **Type labels:** `type/bug`, `type/feature`, or `type/docs`
-- **Size labels:** `size:small`, `size:medium`, or `size:large`
+**${TIMELINE}**
 
-When labels are updated, the workflow will automatically re-run and trigger the appropriate validation steps for the new classification.
+$(if [ "$SIZE" = "large" ]; then echo "
+> **Note for Large PRs**: We'll start with an early alignment phase to ensure your approach fits with our goals before diving into detailed validation. This saves everyone time!
+"; fi)
+
+### What You Can Do
+
+- **Push updates anytime** - validation updates automatically!
+- Check your validation comment for specific todos
+- Address any feedback from automated checks or AI review
 
 ---
 
-**Resources**
-- [Contributing guidelines](https://github.com/grafana/grafana/blob/main/CONTRIBUTING.md)
-- [Create a pull request](https://github.com/grafana/grafana/blob/main/contribute/create-pull-request.md)
-- [Community forums](https://gra.fan/fromgithubtoforums)
-- [Community Slack](https://slack.grafana.com/)
+💡 See our [External PR Workflow Guide](../contribute/external-pr-workflow.md) for more details.
 
-*This analysis was generated automatically. Validation workflows should begin shortly.*
+<!-- external-pr-categorization-comment -->
 EOF
 
-# Replace placeholders
-sed -i "s/__SIZE__/$SIZE/g" /tmp/pr-analysis-comment.md
-sed -i "s/__TYPE__/$TYPE/g" /tmp/pr-analysis-comment.md
+# Post comment using gh CLI
+gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/categorization-comment.md
 
-# Post comment
-gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr-analysis-comment.md
-
-echo "✅ Posted automated comment to PR #$PR_NUMBER (size: $SIZE, type: $TYPE)"
-
+echo "✅ Posted categorization comment to PR #$PR_NUMBER"

@@ -2,6 +2,8 @@
 
 Welcome to Grafana! This guide explains our adaptive PR workflow designed to provide the best experience for external contributors while ensuring code quality.
 
+> **New!** We've updated our validation system to be more helpful and efficient. You'll now receive a friendly todo list and AI-powered feedback on your PR. The system monitors existing CI/CD (no duplicate runs) and provides clear guidance on what's needed.
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -18,6 +20,14 @@ Our workflow automatically categorizes your PR based on **size** and **type**, t
 - 🟢 **Small PRs** get fast turnaround with lightweight checks
 - 🟡 **Medium PRs** receive comprehensive validation
 - 🔴 **Large PRs** get early human alignment to avoid wasted effort
+
+### How It Works
+
+1. **Your PR is categorized** automatically by size and type
+2. **You receive a todo checklist** showing what's being validated
+3. **Automated checks run** (we monitor existing CI/CD, no duplicates!)
+4. **AI provides friendly feedback** on code quality and tests
+5. **Human reviewers** give final approval
 
 ## PR Categorization
 
@@ -116,20 +126,44 @@ In the PR template, you can indicate your own categorization. Our automation wil
 
 1. **Instant**: Bot adds `pr/external` label
 2. **Within 1 minute**: PR is categorized (size + type labels applied)
-3. **Within 2 minutes**: You receive a comment explaining the workflow
-4. **Within 5 minutes**: Automated validation begins
+3. **Within 2 minutes**: You receive a categorization comment explaining the workflow
+4. **Within 5 minutes**: You receive a validation comment with your todo checklist
+
+### Your Validation Comment
+
+You'll receive a single, consolidated comment that includes:
+
+**Todo Checklist:**
+```markdown
+## 📝 Documentation PR Validation 🟢 (small)
+
+### Automated Checks (we monitor these)
+- [x] Vale prose linting ✅
+
+### 🤖 Quick Review
+Your documentation is clear and well-structured! The examples help
+readers understand the concepts effectively.
+
+### Next Steps
+Push updates anytime - this checklist updates automatically!
+```
+
+The checklist updates automatically when you push changes. You'll see:
+- ✅ for passed checks
+- ❌ for failed checks
+- ⏳ for checks that are still running
 
 ### Notifications You'll Receive
 
-- 📊 Categorization results with expected workflow
-- ✅ Validation status (pass/fail) with specific guidance
-- 🤖 AI review feedback (if any issues found)
-- 💬 Human reviewer comments and questions
-- ✅ Approval and merge notifications
+- 📊 **Categorization comment**: Explains your PR category and timeline
+- ✅ **Validation comment**: Your todo checklist (updates automatically)
+- 🤖 **AI feedback**: Friendly, concise feedback on code quality (in validation comment)
+- 💬 **Human reviewer comments**: Questions and suggestions
+- ✅ **Approval and merge**: Final notifications
 
 ### Squad Notifications
 
-When your PR is ready for human review, the relevant squad is automatically notified via Slack. They'll see:
+When your PR passes automated validation, the relevant squad is automatically notified via Slack. They'll see:
 - Your PR details and category
 - Validation status
 - AI review summary
@@ -190,7 +224,11 @@ For new features and bug fixes, tests are required. The automation will flag mis
 
 ### What if automated checks fail?
 
-The bot will comment with specific guidance. Fix the issues and push - validation runs automatically on each update.
+Your validation comment will show which checks failed with specific guidance on how to fix them. Simply address the issues and push - the validation comment updates automatically on each push.
+
+### Why am I seeing AI feedback?
+
+We use AI to provide friendly, helpful feedback on code quality and tests. It's designed to be encouraging and only mentions critical issues (not cosmetic stuff). Think of it as a friendly companion helping you polish your PR before human review.
 
 ### Can I skip certain checks?
 
@@ -230,5 +268,8 @@ See the [Maintainer Guide](./maintainer-external-pr-guide.md) for information on
 ---
 
 Thank you for contributing to Grafana! We appreciate your effort and look forward to your contribution. 🎉
+
+
+
 
 

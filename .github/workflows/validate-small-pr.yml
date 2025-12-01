@@ -59,6 +59,31 @@ jobs:
               echo "PR #$pr_number does not have size:small label, skipping"
             fi
           fi
+      
+      - name: Detect PR type
+        id: detect-type
+        if: steps.pr-info.outputs.should-run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
+        run: |
+          # Get PR labels
+          labels=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json labels --jq '.labels[].name' | tr '\n' ',')
+          
+          # Detect type from labels
+          if echo "$labels" | grep -q "type/docs"; then
+            PR_TYPE="docs"
+          elif echo "$labels" | grep -q "type/bug"; then
+            PR_TYPE="bugfix"
+          elif echo "$labels" | grep -q "type/feature"; then
+            PR_TYPE="feature"
+          else
+            # Default to feature if no type label
+            PR_TYPE="feature"
+          fi
+          
+          echo "pr-type=$PR_TYPE" >> "$GITHUB_OUTPUT"
+          echo "Detected PR type: $PR_TYPE"
 
       - name: Checkout repository
         if: steps.pr-info.outputs.should-run == 'true'
@@ -66,234 +91,64 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Detect changed areas
+      - name: Monitor existing workflows
         if: steps.pr-info.outputs.should-run == 'true'
-        id: detect-areas
-        uses: ./.github/actions/detect-areas
+        id: monitor-workflows
+        uses: ./.github/actions/external-pr-validation/monitor-workflows
         with:
           github-token: ${{ github.token }}
           pr-number: ${{ steps.pr-info.outputs.pr-number }}
+          pr-type: ${{ steps.detect-type.outputs.pr-type }}
 
-      - name: Check PR requirements
+      - name: Run AI quality assessment
         if: steps.pr-info.outputs.should-run == 'true'
-        id: check-requirements
-        uses: ./.github/actions/check-requirements
+        id: ai-assessment
+        uses: ./.github/actions/external-pr-validation/assess-quality
         with:
           github-token: ${{ github.token }}
           pr-number: ${{ steps.pr-info.outputs.pr-number }}
+          pr-type: ${{ steps.detect-type.outputs.pr-type }}
+          pr-size: small
+          openai-api-key: ${{ secrets.OPEN_AI_KEY }}
 
-      - name: Verify tests exist
+      - name: Post validation comment
         if: steps.pr-info.outputs.should-run == 'true'
-        id: verify-tests
-        uses: ./.github/actions/verify-tests
+        uses: ./.github/actions/external-pr-validation/post-validation-comment
         with:
           github-token: ${{ github.token }}
           pr-number: ${{ steps.pr-info.outputs.pr-number }}
+          pr-type: ${{ steps.detect-type.outputs.pr-type }}
+          pr-size: small
+          workflow-results: ${{ steps.monitor-workflows.outputs.results-json }}
+          workflow-summary: ${{ steps.monitor-workflows.outputs.summary-text }}
+          ai-feedback: ${{ steps.ai-assessment.outputs.feedback-text }}
+          template-path: .github/templates/todos-small.md
 
-      - name: Run linting checks
-        if: steps.pr-info.outputs.should-run == 'true'
-        id: lint
-        continue-on-error: true
-        run: |
-          # Determine which linting to run based on detected areas
-          AREAS="${{ steps.detect-areas.outputs.areas }}"
-          lint_failed=false
-          
-          if echo "$AREAS" | grep -q "frontend"; then
-            echo "Running frontend linting..."
-            if command -v yarn &> /dev/null; then
-              yarn install --immutable || lint_failed=true
-              yarn lint || lint_failed=true
-            else
-              echo "WARNING: yarn not found, skipping frontend lint"
-            fi
-          fi
-          
-          if echo "$AREAS" | grep -q "backend"; then
-            echo "Running backend linting..."
-            if command -v go &> /dev/null; then
-              go fmt ./... || lint_failed=true
-              go vet ./... || lint_failed=true
-            else
-              echo "WARNING: go not found, skipping backend lint"
-            fi
-          fi
-          
-          if [ "$lint_failed" = true ]; then
-            echo "lint-passed=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          else
-            echo "lint-passed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run relevant tests
-        if: steps.pr-info.outputs.should-run == 'true'
-        id: tests
-        continue-on-error: true
-        run: |
-          # Run tests for changed areas
-          AREAS="${{ steps.detect-areas.outputs.areas }}"
-          tests_failed=false
-          
-          if echo "$AREAS" | grep -q "frontend"; then
-            echo "Running frontend tests..."
-            if command -v yarn &> /dev/null && [ -f "package.json" ]; then
-              # Run only tests for changed files
-              yarn test:ci || tests_failed=true
-            else
-              echo "WARNING: Skipping frontend tests"
-            fi
-          fi
-          
-          if echo "$AREAS" | grep -q "backend"; then
-            echo "Running backend tests..."
-            if command -v go &> /dev/null; then
-              # Run short tests only for small PRs
-              go test -short ./... || tests_failed=true
-            else
-              echo "WARNING: Skipping backend tests"
-            fi
-          fi
-          
-          if [ "$tests_failed" = true ]; then
-            echo "tests-passed=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          else
-            echo "tests-passed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Evaluate validation results
-        if: steps.pr-info.outputs.should-run == 'true'
-        id: evaluate
-        shell: bash
-        env:
-          REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
-          TESTS_EXIST: ${{ steps.verify-tests.outputs.tests-exist }}
-          LINT_PASSED: ${{ steps.lint.outputs.lint-passed }}
-          TESTS_PASSED: ${{ steps.tests.outputs.tests-passed }}
-        run: |
-          all_passed=true
-          
-          if [ "$REQUIREMENTS_MET" != "true" ]; then all_passed=false; fi
-          if [ "$TESTS_EXIST" != "true" ]; then all_passed=false; fi
-          if [ "$LINT_PASSED" != "true" ]; then all_passed=false; fi
-          if [ "$TESTS_PASSED" != "true" ]; then all_passed=false; fi
-          
-          echo "all-passed=$all_passed" >> "$GITHUB_OUTPUT"
-
-      - name: Post validation results
-        if: steps.pr-info.outputs.should-run == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.pr-info.outputs.pr-number }}
-          ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
-          REQUIREMENTS_MET: ${{ steps.check-requirements.outputs.all-requirements-met }}
-          MISSING_REQUIREMENTS: ${{ steps.check-requirements.outputs.missing-requirements }}
-          TESTS_EXIST: ${{ steps.verify-tests.outputs.tests-exist }}
-          MISSING_TESTS: ${{ steps.verify-tests.outputs.missing-tests }}
-          LINT_PASSED: ${{ steps.lint.outputs.lint-passed }}
-          TESTS_PASSED: ${{ steps.tests.outputs.tests-passed }}
-        run: |
-          if [ "$ALL_PASSED" = "true" ]; then
-            COMMENT="## Small PR Validation Passed
-
-All automated checks have passed! Your PR is ready for AI code review.
-
-### Validation Results:
-- PR requirements met
-- Tests exist for changed code
-- Linting checks passed
-- Test suite passed
-
-**Next steps:**
-1. Cursor's Bugbot will review your code shortly
-2. A human reviewer will provide final approval
-3. Small PRs typically have faster turnaround times
-
-Thank you for your contribution!"
-          else
-            COMMENT="## Small PR Validation - Action Required
-
-Some automated checks did not pass. Please address the following:
-
-### Validation Results:"
-            
-            if [ "$REQUIREMENTS_MET" = "true" ]; then
-              COMMENT="$COMMENT
-- PR requirements met"
-            else
-              COMMENT="$COMMENT
-- **PR requirements not met:**
-\`\`\`
-$MISSING_REQUIREMENTS
-\`\`\`"
-            fi
-            
-            if [ "$TESTS_EXIST" = "true" ]; then
-              COMMENT="$COMMENT
-- Tests exist for changed code"
-            else
-              COMMENT="$COMMENT
-- **Missing tests for:**
-\`\`\`
-$MISSING_TESTS
-\`\`\`
-Please add test files following these patterns:
-  - Frontend: \`filename.test.ts\` or \`filename.spec.ts\`
-  - Backend: \`filename_test.go\`"
-            fi
-            
-            if [ "$LINT_PASSED" = "true" ]; then
-              COMMENT="$COMMENT
-- Linting checks passed"
-            else
-              COMMENT="$COMMENT
-- **Linting checks failed** - Please run linting locally and fix issues"
-            fi
-            
-            if [ "$TESTS_PASSED" = "true" ]; then
-              COMMENT="$COMMENT
-- Test suite passed"
-            else
-              COMMENT="$COMMENT
-- **Tests failed** - Please ensure all tests pass locally"
-            fi
-            
-            COMMENT="$COMMENT
-
-### How to fix:
-1. Address the issues listed above
-2. Push your changes - validation will run automatically
-3. See [Contributing Guidelines](../contribute/create-pull-request.md) for details
-
-*This is an automated validation for Small PRs.*"
-          fi
-          
-          gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "$COMMENT"
-
-      - name: Notify squad if validation passed
-        if: steps.pr-info.outputs.should-run == 'true' && steps.evaluate.outputs.all-passed == 'true'
+      - name: Notify squad if workflows passed
+        if: steps.pr-info.outputs.should-run == 'true' && steps.monitor-workflows.outputs.all-passed == 'true'
         uses: ./.github/actions/notify-squad
         with:
           github-token: ${{ github.token }}
           pr-number: ${{ steps.pr-info.outputs.pr-number }}
+          pr-title: ''
+          pr-author: ''
+          pr-url: ''
           category-size: small
-          category-type: ${{ steps.detect-areas.outputs.primary-area }}
+          category-type: ${{ steps.detect-type.outputs.pr-type }}
           stage: validation-passed
           validation-status: passed
-          ai-review-summary: Ready for lightweight AI review
+          ai-review-summary: ${{ steps.ai-assessment.outputs.summary }}
 
       - name: Set status check
         if: steps.pr-info.outputs.should-run == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
-          ALL_PASSED: ${{ steps.evaluate.outputs.all-passed }}
+          ALL_PASSED: ${{ steps.monitor-workflows.outputs.all-passed }}
         run: |
           if [ "$ALL_PASSED" = "true" ]; then
-            echo "Validation passed - ready for AI review - Squad notified"
+            echo "✅ All workflows passed - validation complete"
             exit 0
           else
-            echo "Validation failed - action required"
+            echo "⚠️ Some workflows failed or pending - see validation comment for details"
             exit 1
           fi
 
