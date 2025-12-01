@@ -125,7 +125,9 @@ jobs:
               ;;
           esac
           
-          COMMENT="## ${TYPE_EMOJI} Large ${TYPE_NAME} PR - Early Alignment Required
+          # Build comment using heredoc
+          COMMENT=$(cat <<EOF
+## ${TYPE_EMOJI} Large ${TYPE_NAME} PR - Early Alignment Required
 
 Thank you for this substantial contribution!
 
@@ -155,7 +157,9 @@ For large PRs, we request early human review **before** running extensive automa
 
 A squad notification has been sent. Thank you for your patience!
 
-*This is part of our Large PR workflow to ensure early alignment and efficient collaboration.*"
+*This is part of our Large PR workflow to ensure early alignment and efficient collaboration.*
+EOF
+)
           
           gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "$COMMENT"
           echo "✅ Posted alignment request comment"
