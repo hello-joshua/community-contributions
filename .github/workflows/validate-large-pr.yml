@@ -2,7 +2,13 @@ name: Validate Large PR
 
 on:
   workflow_run:
-    workflows: ["Categorize External PR (Simple)"]
+    workflows: 
+      - "Categorize External PR (Simple)"
+      - "Lint Frontend"
+      - "golangci-lint"
+      - "Backend Unit Tests"
+      - "Frontend tests"
+      - "Documentation CI"
     types:
       - completed
   pull_request_target:
