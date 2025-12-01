@@ -104,27 +104,27 @@ runs:
         # Build type-specific system prompt
         case "$PR_TYPE" in
           docs)
-            FOCUS="Review this documentation PR. Focus on: content clarity and helpfulness, appropriate structure for the size. Be encouraging and positive. Keep feedback to 2-3 sentences max. Only mention critical issues, ignore minor formatting. Always start with something positive."
+            FOCUS="You're providing an initial quick review of this documentation PR. Automated checks are still running. Focus on: obvious content issues, structural problems, or critical gaps. Be helpful and fair. Keep it to 1-2 sentences. If there's nothing critical to mention, respond with just 'Automated checks are running. We'll review once they complete.' Don't create expectations about merging - this is just an initial scan."
             ;;
           bugfix)
-            FOCUS="Review this bugfix PR. Focus on: whether tests actually verify the fix, any obvious new bugs introduced, if the fix is focused (not scope creep). Be encouraging and positive. Keep feedback to 2-3 sentences max. Only mention critical issues, ignore cosmetic stuff. Always start with something positive."
+            FOCUS="You're providing an initial quick review of this bugfix PR. Automated checks are still running. Focus on: obvious missing test coverage for the fix, potential new bugs in the changes, or scope creep. Be helpful and fair. Keep it to 1-2 sentences. If there's nothing critical to mention, respond with just 'Automated checks are running. We'll review once they complete.' Don't create expectations about merging - this is just an initial scan."
             ;;
           feature)
-            FOCUS="Review this feature PR. Focus on: whether tests cover the new functionality adequately, code quality and maintainability, any obvious bugs or missed edge cases. Be encouraging and positive. Keep feedback to 2-3 sentences max. Only mention critical issues, ignore cosmetic stuff. Always start with something positive."
+            FOCUS="You're providing an initial quick review of this feature PR. Automated checks are still running. Focus on: obvious missing test coverage, potential bugs or edge cases not handled, or code quality concerns. Be helpful and fair. Keep it to 1-2 sentences. If there's nothing critical to mention, respond with just 'Automated checks are running. We'll review once they complete.' Don't create expectations about merging - this is just an initial scan."
             ;;
         esac
         
         # Add size-specific guidance
         if [ "$PR_SIZE" = "small" ]; then
-          FOCUS="$FOCUS This is a SMALL PR, so keep review lightweight and quick."
+          FOCUS="$FOCUS This is a small PR - be brief."
         elif [ "$PR_SIZE" = "medium" ]; then
-          FOCUS="$FOCUS This is a MEDIUM PR, so be thorough but concise."
+          FOCUS="$FOCUS This is a medium PR - focus on the most important issues."
         else
-          FOCUS="$FOCUS This is a LARGE PR (post-alignment), so focus on critical issues only."
+          FOCUS="$FOCUS This is a large PR (post-alignment) - only mention critical blockers."
         fi
         
         # Build user message with PR context
-        USER_MSG=$(printf "Title: %s\n\nFiles changed: %s\n\nPR Description:\n%s\n\nCode changes:\n%s\n\nPlease provide friendly, concise feedback focused on code quality and tests." "$PR_TITLE" "$FILES" "$PR_BODY" "$DIFF")
+        USER_MSG=$(printf "Title: %s\n\nFiles changed: %s\n\nPR Description:\n%s\n\nCode changes:\n%s\n\nProvide a quick initial review. Remember: automated checks are still running, so most checkboxes will be unchecked. Only mention critical issues you can spot in the code. If nothing critical, just say automated checks are running." "$PR_TITLE" "$FILES" "$PR_BODY" "$DIFF")
         
         # Build JSON payload using jq
         payload=$(jq -n \

@@ -122,7 +122,7 @@ runs:
         # Add AI feedback if available
         if [ -n "$AI_FEEDBACK" ] && [ "$AI_FEEDBACK" != "*AI assessment skipped*" ]; then
           cat >> /tmp/validation-comment.md <<EOF
-        ### Quick Review
+        ### Initial scan
         ${AI_FEEDBACK}
         
         EOF
