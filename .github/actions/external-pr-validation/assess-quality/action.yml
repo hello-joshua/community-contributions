@@ -123,8 +123,9 @@ runs:
           FOCUS="$FOCUS This is a LARGE PR (post-alignment), so focus on critical issues only."
         fi
         
-        # Build user message with PR context
-        USER_MSG="Title: $PR_TITLE
+        # Build user message with PR context using heredoc
+        read -r -d '' USER_MSG << ENDOFMSG || true
+Title: $PR_TITLE
 
 Files changed: $FILES
 
@@ -134,7 +135,8 @@ $PR_BODY
 Code changes:
 $DIFF
 
-Please provide friendly, concise feedback focused on code quality and tests."
+Please provide friendly, concise feedback focused on code quality and tests.
+ENDOFMSG
         
         # Build JSON payload using jq
         payload=$(jq -n \
