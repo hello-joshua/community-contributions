@@ -56,18 +56,18 @@ cat > /tmp/categorization-comment.md <<EOF
 
 Thanks for your contribution! We've categorized your PR to provide the right level of validation.
 
-### What Happens Next
+### What happens next
 
-1. **Automated checks** will run (we monitor existing CI/CD, no duplicates!)
+1. **Automated checks** will run (we monitor existing CI/CD)
 2. **You'll get a checklist** showing what's being validated
-3. **Our AI companion** will provide friendly feedback on code quality and tests
-4. **A human reviewer** will provide final approval
+3. **Our AI companion** will provide feedback on code quality and tests
+4. **A member of the relevant squad** will provide final approval
 
 $(if [ "$SIZE" = "large" ]; then echo "
-> **Note for Large PRs**: We'll start with an early alignment phase to ensure your approach fits with our goals before diving into detailed validation. This saves everyone time!
+> **Note for large PRs**: We'll start with an early alignment phase to ensure your approach fits with our goals before diving into detailed validation. This saves everyone time!
 "; fi)
 
-### What You Can Do
+### What you can do
 
 - **Push updates anytime** - validation updates automatically!
 - Check your validation comment for specific todos

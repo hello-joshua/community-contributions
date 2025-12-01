@@ -1,10 +1,10 @@
 <!-- DOCS SECTION -->
 Hey! Thanks for improving our docs!
 
-### Automated Checks (we monitor these)
+### Automated checks (we monitor these)
 - [ ] Vale prose linting
 
-### What We Look For
+### What we look for
 - Content is clear and helpful
 - Writing follows our style guide
 
@@ -15,34 +15,34 @@ Hey! Thanks for improving our docs!
 <!-- BUGFIX SECTION -->
 Thanks for fixing this!
 
-### Automated Checks (we monitor these)
+### Automated checks (we monitor these)
 - [ ] Frontend linting
 - [ ] Backend linting  
 - [ ] Frontend tests
 - [ ] Backend tests
 
-### What We Look For
+### What we look for
 - Tests verify the fix works
 - No new bugs introduced
 - Fix stays focused
 
-**You're on the right track!** Push changes and we'll update this checklist automatically.
+Push changes and we'll update this checklist automatically.
 
 ---
 
 <!-- FEATURE SECTION -->
 Excited about this feature!
 
-### Automated Checks (we monitor these)
+### Automated checks (we monitor these)
 - [ ] Frontend linting
 - [ ] Backend linting
 - [ ] Frontend tests
 - [ ] Backend tests
 
-### What We Look For
+### What we look for
 - Tests cover new functionality
 - Code is clean and maintainable
 - No bugs introduced
 
-**Looking good!** Push changes and we'll update this checklist automatically.
+Push changes and we'll update this checklist automatically.
 
