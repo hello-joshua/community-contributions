@@ -131,15 +131,7 @@ runs:
           --arg model "gpt-4o-mini" \
           --arg system_prompt "$FOCUS" \
           --arg user_msg "$USER_MSG" \
-          '{
-            model: $model,
-            messages: [
-              {role: "system", content: $system_prompt},
-              {role: "user", content: $user_msg}
-            ],
-            temperature: 0.3,
-            max_tokens: 300
-          }')
+          '{"model":$model,"messages":[{"role":"system","content":$system_prompt},{"role":"user","content":$user_msg}],"temperature":0.3,"max_tokens":300}')
         
         # Call OpenAI API
         response=$(curl -s -X POST https://api.openai.com/v1/chat/completions \
