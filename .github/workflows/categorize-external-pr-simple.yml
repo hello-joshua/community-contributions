@@ -35,12 +35,29 @@ jobs:
             echo "Bot changed labels - will recategorize"
           fi
 
-      - name: Post human correction acknowledgment
+      - name: Check if relevant label was added
+        id: check_label
         if: steps.check_human.outputs.human_change == 'true'
+        run: |
+          added_label="${{ github.event.label.name }}"
+          echo "Added label: $added_label"
+          
+          # Only react to size:*, type/*, or alignment-approved labels
+          if [[ "$added_label" =~ ^size: ]] || [[ "$added_label" =~ ^type/ ]] || [[ "$added_label" == "alignment-approved" ]]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "Relevant label change - will post comment"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "Unrelated label ($added_label) - skipping comment"
+          fi
+
+      - name: Post human correction acknowledgment
+        if: steps.check_human.outputs.human_change == 'true' && steps.check_label.outputs.relevant == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           ACTOR: ${{ github.actor }}
+          ADDED_LABEL: ${{ github.event.label.name }}
         run: |
           # Get current labels
           all_labels=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json labels --jq '.labels[].name')
@@ -50,7 +67,7 @@ jobs:
           type_label=$(echo "$all_labels" | grep -E "^type/" || echo "none")
           
           # Check if alignment-approved was added (for large PRs)
-          if echo "$all_labels" | grep -q "alignment-approved"; then
+          if [ "$ADDED_LABEL" = "alignment-approved" ]; then
             # Remove awaiting-alignment if present
             if echo "$all_labels" | grep -q "awaiting-alignment"; then
               gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --remove-label "awaiting-alignment" || true
@@ -64,7 +81,7 @@ jobs:
               echo "Thanks for aligning on the approach! Automated validation will now run."
             } > /tmp/human-update.md
           else
-            # Regular label update
+            # Regular size/type label update
             {
               echo "## Labels updated"
               echo ""
