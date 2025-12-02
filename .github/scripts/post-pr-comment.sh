@@ -50,8 +50,40 @@ case "$SIZE" in
     ;;
 esac
 
-# Generate comment
-cat > /tmp/categorization-comment.md <<EOF
+# Generate comment based on size
+if [ "$SIZE" = "large" ]; then
+  # Large PR - different flow (alignment first)
+  cat > /tmp/categorization-comment.md <<EOF
+## ${TYPE_EMOJI} PR Categorized: ${TYPE_NAME} ${SIZE_EMOJI} (Size: ${SIZE})
+
+Thanks for your contribution! This is a substantial PR, so we'll start with early alignment.
+
+### What happens next
+
+1. **Early alignment** - A squad member will review your approach first
+2. **Once aligned** - We'll add the \`alignment-approved\` label
+3. **Then automated checks** run and you'll get a validation checklist
+4. **Final review** by a squad member
+
+### Why early alignment?
+
+For large PRs, we want to ensure your approach fits with project goals before diving into detailed validation. This saves everyone time!
+
+### What you can do
+
+- **Add context** about your implementation approach
+- **Be ready to discuss** the design with a squad member
+- Wait for alignment before addressing detailed feedback
+
+---
+
+💡 See our [External PR Workflow Guide](../contribute/external-pr-workflow.md) for more details.
+
+<!-- external-pr-categorization-comment -->
+EOF
+else
+  # Small/Medium PR - standard flow
+  cat > /tmp/categorization-comment.md <<EOF
 ## ${TYPE_EMOJI} PR Categorized: ${TYPE_NAME} ${SIZE_EMOJI} (Size: ${SIZE})
 
 Thanks for your contribution! We've categorized your PR to provide the right level of validation.
@@ -60,18 +92,13 @@ Thanks for your contribution! We've categorized your PR to provide the right lev
 
 1. **Automated checks** will run (we monitor existing CI/CD)
 2. **You'll get a checklist** showing what's being validated
-3. **Our AI companion** will provide feedback on code quality and tests
-4. **A member of the relevant squad** will provide final approval
-
-$(if [ "$SIZE" = "large" ]; then echo "
-> **Note for large PRs**: We'll start with an early alignment phase to ensure your approach fits with our goals before diving into detailed validation. This saves everyone time!
-"; fi)
+3. **A member of the relevant squad** will provide final approval
 
 ### What you can do
 
 - **Push updates anytime** - validation updates automatically!
 - Check your validation comment for specific todos
-- Address any feedback from automated checks or AI review
+- Address any feedback from automated checks
 
 ---
 
@@ -79,6 +106,7 @@ $(if [ "$SIZE" = "large" ]; then echo "
 
 <!-- external-pr-categorization-comment -->
 EOF
+fi
 
 # Post comment using gh CLI
 gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/categorization-comment.md
