@@ -45,20 +45,35 @@ jobs:
           size_label=$(echo "$all_labels" | grep -E "^size:" || echo "none")
           type_label=$(echo "$all_labels" | grep -E "^type/" || echo "none")
           
-          {
-            echo "## Labels updated by maintainer"
-            echo ""
-            echo "Thank you @$ACTOR for updating the labels."
-            echo ""
-            echo "Current classification:"
-            echo "- Size: \`$size_label\`"
-            echo "- Type: \`$type_label\`"
-            echo ""
-            echo "The appropriate validation workflow will now run based on this classification."
-          } > /tmp/human-update.md
+          # Check if alignment-approved was added (for large PRs)
+          if echo "$all_labels" | grep -q "alignment-approved"; then
+            # Remove awaiting-alignment if present
+            if echo "$all_labels" | grep -q "awaiting-alignment"; then
+              gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --remove-label "awaiting-alignment" || true
+              echo "Removed awaiting-alignment label"
+            fi
+            
+            # Post special message for alignment approval
+            {
+              echo "## ✅ Alignment approved"
+              echo ""
+              echo "Thanks for aligning on the approach! Automated validation will now run."
+              echo ""
+              echo "Current classification: \`$size_label\` | \`$type_label\`"
+            } > /tmp/human-update.md
+          else
+            # Regular label update
+            {
+              echo "## Labels updated"
+              echo ""
+              echo "Current classification: \`$size_label\` | \`$type_label\`"
+              echo ""
+              echo "Validation workflow will update accordingly."
+            } > /tmp/human-update.md
+          fi
           
           gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body-file /tmp/human-update.md
-          echo "Acknowledged human label change with current state"
+          echo "Posted label update acknowledgment"
 
       - name: Checkout repository
         if: steps.check_human.outputs.human_change != 'true'
