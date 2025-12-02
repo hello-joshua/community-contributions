@@ -45,8 +45,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # First try the pull_requests array
             pr_number=$(gh api "/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" \
-              --jq '.pull_requests[0].number')
+              --jq '.pull_requests[0].number // empty')
+            
+            # If empty, find PR by head branch
+            if [ -z "$pr_number" ]; then
+              echo "pull_requests array empty, finding PR by head branch..."
+              head_branch="${{ github.event.workflow_run.head_branch }}"
+              echo "Head branch: $head_branch"
+              
+              # Find the PR with this head branch
+              pr_number=$(gh pr list --repo ${{ github.repository }} --state open --head "$head_branch" --json number --jq '.[0].number // empty')
+              
+              if [ -z "$pr_number" ]; then
+                echo "No open PR found for branch $head_branch, skipping"
+                echo "should-run=false" >> "$GITHUB_OUTPUT"
+                echo "pr-number=" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            
+            echo "Found PR #$pr_number"
             echo "pr-number=$pr_number" >> "$GITHUB_OUTPUT"
             
             labels=$(gh pr view "$pr_number" --repo ${{ github.repository }} --json labels --jq '.labels[].name' | tr '\n' ',')
