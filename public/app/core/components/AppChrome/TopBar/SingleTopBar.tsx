@@ -77,11 +77,11 @@ export const SingleTopBar = memo(function SingleTopBar({
               tooltip={t('navigation.megamenu.open', 'Open menu')}
             >
               <Stack gap={0} alignItems="center">
-                <Branding.MenuLogo className={styles.img} />
-                <Icon size="sm" name="angle-down" />
+                <Icon name="bars" size="xl" />
               </Stack>
             </ToolbarButton>
           )}
+          {!menuDockedAndOpen && <Branding.HomeLink homeNav={homeNav} />}
           {topLevelScopes ? <ScopesSelector /> : undefined}
           <Breadcrumbs breadcrumbs={breadcrumbs} className={styles.breadcrumbsWrapper} />
           {!showToolbarLevel && breadcrumbActions}
@@ -141,6 +141,18 @@ const getStyles = (theme: GrafanaTheme2, menuDockedAndOpen: boolean) => ({
   kioskToggle: css({
     [theme.breakpoints.down('lg')]: {
       display: 'none',
+    },
+  }),
+  homeLink: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: theme.spacing(3),
+    width: theme.spacing(3),
+    margin: theme.spacing(0, 0.5),
+    img: {
+      maxHeight: '100%',
+      maxWidth: '100%',
     },
   }),
 });
