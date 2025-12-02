@@ -1,6 +1,6 @@
 #!/bin/bash
 # Post initial categorization comment for external PRs
-# Usage: post-pr-comment.sh <pr-number> <size> <type> <repository>
+# Usage: post-pr-comment.sh <pr-number> <size> <type> <repository> [summary]
 
 set -e
 
@@ -8,9 +8,10 @@ PR_NUMBER="$1"
 SIZE="$2"
 TYPE="$3"
 REPO="$4"
+SUMMARY="$5"
 
 if [ -z "$PR_NUMBER" ] || [ -z "$SIZE" ] || [ -z "$TYPE" ] || [ -z "$REPO" ]; then
-  echo "Usage: $0 <pr-number> <size> <type> <repository>"
+  echo "Usage: $0 <pr-number> <size> <type> <repository> [summary]"
   exit 1
 fi
 
@@ -50,15 +51,28 @@ case "$SIZE" in
     ;;
 esac
 
+# Build summary section if available
+if [ -n "$SUMMARY" ]; then
+  SUMMARY_SECTION="### Summary
+
+$SUMMARY
+
+"
+else
+  SUMMARY_SECTION=""
+fi
+
 # Generate comment based on size
 if [ "$SIZE" = "large" ]; then
   # Large PR - different flow (alignment first)
   cat > /tmp/categorization-comment.md <<EOF
 ## ${TYPE_EMOJI} PR Categorized: ${TYPE_NAME} ${SIZE_EMOJI} (Size: ${SIZE})
 
-Thanks for your contribution! This is a substantial PR, so we'll start with early alignment.
+Thanks for your contribution!
 
-### What happens next
+${SUMMARY_SECTION}### What happens next
+
+We've categorized your PR to provide the right level of validation.
 
 1. **Early alignment** - A squad member will review your approach first
 2. **Once aligned** - We'll add the \`alignment-approved\` label
@@ -85,9 +99,11 @@ else
   cat > /tmp/categorization-comment.md <<EOF
 ## ${TYPE_EMOJI} PR Categorized: ${TYPE_NAME} ${SIZE_EMOJI} (Size: ${SIZE})
 
-Thanks for your contribution! We've categorized your PR to provide the right level of validation.
+Thanks for your contribution!
 
-### What happens next
+${SUMMARY_SECTION}### What happens next
+
+We've categorized your PR to provide the right level of validation.
 
 1. **Automated checks** will run (we monitor existing CI/CD)
 2. **You'll get a checklist** showing what's being validated
@@ -113,4 +129,4 @@ fi
 # Post comment using gh CLI
 gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/categorization-comment.md
 
-echo "✅ Posted categorization comment to PR #$PR_NUMBER"
+echo "Posted categorization comment to PR #$PR_NUMBER"

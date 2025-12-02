@@ -111,17 +111,6 @@ jobs:
           pr-number: ${{ steps.pr-info.outputs.pr-number }}
           pr-type: ${{ steps.detect-type.outputs.pr-type }}
 
-      - name: Run AI quality assessment
-        if: steps.pr-info.outputs.should-run == 'true'
-        id: ai-assessment
-        uses: ./.github/actions/external-pr-validation/assess-quality
-        with:
-          github-token: ${{ github.token }}
-          pr-number: ${{ steps.pr-info.outputs.pr-number }}
-          pr-type: ${{ steps.detect-type.outputs.pr-type }}
-          pr-size: small
-          openai-api-key: ${{ secrets.OPEN_AI_KEY }}
-
       - name: Post validation comment
         if: steps.pr-info.outputs.should-run == 'true'
         uses: ./.github/actions/external-pr-validation/post-validation-comment
@@ -132,7 +121,6 @@ jobs:
           pr-size: small
           workflow-results: ${{ steps.monitor-workflows.outputs.results-json }}
           workflow-summary: ${{ steps.monitor-workflows.outputs.summary-text }}
-          ai-feedback: ${{ steps.ai-assessment.outputs.feedback-text }}
           template-path: .github/templates/todos-small.md
 
       - name: Notify squad if workflows passed
@@ -148,7 +136,6 @@ jobs:
           category-type: ${{ steps.detect-type.outputs.pr-type }}
           stage: validation-passed
           validation-status: passed
-          ai-review-summary: ${{ steps.ai-assessment.outputs.summary }}
 
       - name: Set status check
         if: steps.pr-info.outputs.should-run == 'true'

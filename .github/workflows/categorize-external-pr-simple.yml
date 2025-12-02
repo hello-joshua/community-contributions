@@ -132,20 +132,28 @@ jobs:
           gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --add-label "$TYPE_LABEL"
           echo "Applied labels: $SIZE_LABEL, $TYPE_LABEL"
 
+      - name: Generate PR summary
+        if: github.event.action != 'labeled' && steps.check_human.outputs.human_change != 'true'
+        id: summary
+        uses: ./.github/actions/external-pr-validation/generate-summary
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          openai-api-key: ${{ secrets.OPEN_AI_KEY }}
+
       - name: Post automated comment
         if: github.event.action != 'labeled' && steps.check_human.outputs.human_change != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          OVERRIDE_REASON: ${{ steps.categorize.outputs.override-reason }}
-          ORIGINAL_LABEL: ${{ steps.categorize.outputs.original-label-type }}
-          AI_CLASSIFIED: ${{ steps.categorize.outputs.ai-classified-type }}
+          PR_SUMMARY: ${{ steps.summary.outputs.summary }}
         run: |
           chmod +x .github/scripts/post-pr-comment.sh
           .github/scripts/post-pr-comment.sh \
             "${{ github.event.pull_request.number }}" \
             "${{ steps.categorize.outputs.size }}" \
             "${{ steps.categorize.outputs.type }}" \
-            "${{ github.repository }}"
+            "${{ github.repository }}" \
+            "$PR_SUMMARY"
           echo "PR categorized and comment posted"
 
       - name: Post label update confirmation
