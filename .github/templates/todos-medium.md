@@ -6,13 +6,8 @@ Hey! Thanks for improving our docs!
 - Structure is well-organized with appropriate headings
 - Information flows logically
 
-#### Automated code review
-🤖 An automation will review your changes and leave inline comments if it finds issues.
-- Fix suggestions directly in GitHub - no need to leave!
-- Mark each comment as **resolved** when you've addressed it
-- ✅ **Once all comments are resolved, the code review is complete!**
-
-> 💡 **Issues with the automation?** Comment `skip-automated-review` and let us know what happened.
+#### Code review
+An automation will leave inline comments if it finds issues. Fix directly in GitHub and mark resolved when done.
 
 ---
 
@@ -25,13 +20,8 @@ Thanks for fixing this!
 - No new bugs introduced
 - Fix is well-contained and focused
 
-#### Automated code review
-🤖 An automation will review your changes and leave inline comments if it finds issues.
-- Fix suggestions directly in GitHub - no need to leave!
-- Mark each comment as **resolved** when you've addressed it
-- ✅ **Once all comments are resolved, the code review is complete!**
-
-> 💡 **Issues with the automation?** Comment `skip-automated-review` and let us know what happened.
+#### Code review
+An automation will leave inline comments if it finds issues. Fix directly in GitHub and mark resolved when done.
 
 ---
 
@@ -44,11 +34,6 @@ Thank you for this feature!
 - Edge cases are handled
 - No bugs introduced
 
-#### Automated code review
-🤖 An automation will review your changes and leave inline comments if it finds issues.
-- Fix suggestions directly in GitHub - no need to leave!
-- Mark each comment as **resolved** when you've addressed it
-- ✅ **Once all comments are resolved, the code review is complete!**
-
-> 💡 **Issues with the automation?** Comment `skip-automated-review` and let us know what happened.
+#### Code review
+An automation will leave inline comments if it finds issues. Fix directly in GitHub and mark resolved when done.
 

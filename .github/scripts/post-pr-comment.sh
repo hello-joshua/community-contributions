@@ -62,16 +62,9 @@ Thanks for your contribution! This is a substantial PR, so we'll start with earl
 
 1. **Early alignment** - A squad member will review your approach first
 2. **Once aligned** - We'll add the \`alignment-approved\` label
-3. **Automated checks + code review** - CI runs and an automation reviews your code
-4. **Final review** by a squad member (verifies all feedback is addressed)
-
-### About the automated code review 🤖
-
-An automation will review your code and leave inline comments for any issues it finds:
-- **Fix directly in GitHub** - Click "Fix in Web" to resolve issues without leaving
-- **Mark each comment as resolved** when you've addressed it
-- ✅ **Once all comments are resolved, the code review is complete!**
-- **Having issues?** Comment \`skip-automated-review\` and let us know what happened
+3. **Automated checks** will run (we monitor existing CI/CD)
+4. **Code review** - An automation leaves inline comments; fix directly in GitHub and mark resolved when done
+5. **Final approval** by a squad member
 
 ### What you can do now
 
@@ -82,6 +75,8 @@ An automation will review your code and leave inline comments for any issues it 
 ---
 
 💡 See our [External PR Workflow Guide](../contribute/external-pr-workflow.md) for more details.
+
+Issues with the automated review? Comment \`skip-automated-review\` and let us know.
 
 <!-- external-pr-categorization-comment -->
 EOF
@@ -95,27 +90,21 @@ Thanks for your contribution! We've categorized your PR to provide the right lev
 ### What happens next
 
 1. **Automated checks** will run (we monitor existing CI/CD)
-2. **Automated code review** will leave inline comments if issues are found
-3. **You'll get a checklist** showing what's being validated
-4. **A squad member** will verify all feedback is addressed and provide final approval
-
-### About the automated code review 🤖
-
-An automation will review your code and leave inline comments for any issues it finds:
-- **Fix directly in GitHub** - Click "Fix in Web" to resolve issues without leaving
-- **Mark each comment as resolved** when you've addressed it
-- ✅ **Once all comments are resolved, the code review is complete!**
-- **Having issues?** Comment \`skip-automated-review\` and let us know what happened
+2. **You'll get a checklist** showing what's being validated
+3. **Code review** - An automation leaves inline comments; fix directly in GitHub and mark resolved when done
+4. **Final approval** by a squad member
 
 ### What you can do
 
 - **Push updates anytime** - validation updates automatically!
 - Check your validation comment for specific todos
-- Address automated feedback directly in the PR
+- Address feedback directly in the PR
 
 ---
 
 💡 See our [External PR Workflow Guide](../contribute/external-pr-workflow.md) for more details.
+
+Issues with the automated review? Comment \`skip-automated-review\` and let us know.
 
 <!-- external-pr-categorization-comment -->
 EOF
