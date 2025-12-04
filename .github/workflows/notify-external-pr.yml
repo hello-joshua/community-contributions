@@ -131,9 +131,10 @@ jobs:
         env:
           SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK }}
         run: |
-          pr_url="${{ github.event.pull_request.html_url }}"
+          # Construct URL from safe components (avoid template injection)
+          pr_url="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           pr_title="${{ steps.categorize.outputs.title }}"
-          pr_author="${{ github.event.pull_request.user.login }}"
+          pr_author="external contributor"
           pr_size="${{ steps.categorize.outputs.size }}"
           pr_type="${{ steps.categorize.outputs.type }}"
           pr_summary="${{ steps.summary.outputs.summary }}"
