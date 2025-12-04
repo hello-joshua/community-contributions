@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -130,24 +134,33 @@ jobs:
         if: steps.check-scope.outputs.is-alerting == 'true' && env.SLACK_WEBHOOK != ''
         env:
           SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK }}
+          # Pass step outputs via env vars (safer than template interpolation in shell)
+          PR_TITLE: ${{ steps.categorize.outputs.title }}
+          PR_SIZE: ${{ steps.categorize.outputs.size }}
+          PR_TYPE: ${{ steps.categorize.outputs.type }}
+          PR_SUMMARY: ${{ steps.summary.outputs.summary }}
+          PR_ADDITIONS: ${{ steps.categorize.outputs.additions }}
+          PR_DELETIONS: ${{ steps.categorize.outputs.deletions }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          # Construct URL from safe components (avoid template injection)
-          pr_url="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          pr_title="${{ steps.categorize.outputs.title }}"
+          # Use env vars (sanitized by GitHub Actions runtime)
+          pr_url="https://github.com/${REPO}/pull/${PR_NUMBER}"
           pr_author="external contributor"
-          pr_size="${{ steps.categorize.outputs.size }}"
-          pr_type="${{ steps.categorize.outputs.type }}"
-          pr_summary="${{ steps.summary.outputs.summary }}"
+          
+          # Sanitize title and summary for JSON (escape quotes and newlines)
+          pr_title=$(echo "$PR_TITLE" | tr -d '\n\r' | sed 's/"/\\"/g' | head -c 100)
+          pr_summary=$(echo "$PR_SUMMARY" | tr -d '\n\r' | sed 's/"/\\"/g' | head -c 500)
           
           # Set emoji based on type
-          case "$pr_type" in
+          case "$PR_TYPE" in
             "docs") emoji="📝" ;;
             "bugfix") emoji="🐛" ;;
             *) emoji="✨" ;;
           esac
           
           # Set color based on size
-          case "$pr_size" in
+          case "$PR_SIZE" in
             "small") color="#36a64f" ;;  # green
             "medium") color="#ff9800" ;; # orange
             "large") color="#f44336" ;;  # red
@@ -163,7 +176,7 @@ jobs:
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "$emoji External PR: $pr_type ($pr_size)",
+                    "text": "$emoji External PR: $PR_TYPE ($PR_SIZE)",
                     "emoji": true
                   }
                 },
@@ -171,7 +184,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*<$pr_url|$pr_title>*\nby @$pr_author"
+                    "text": "*<$pr_url|$pr_title>*\nby $pr_author"
                   }
                 },
                 {
@@ -185,7 +198,7 @@ jobs:
                   "type": "context",
                   "elements": [{
                     "type": "mrkdwn",
-                    "text": "Size: $pr_size | Type: $pr_type | +${{ steps.categorize.outputs.additions }}/-${{ steps.categorize.outputs.deletions }} lines"
+                    "text": "Size: $PR_SIZE | Type: $PR_TYPE | +${PR_ADDITIONS}/-${PR_DELETIONS} lines"
                   }]
                 }
               ]
