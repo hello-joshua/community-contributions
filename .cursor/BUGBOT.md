@@ -2,6 +2,14 @@
 
 This repository is a sandbox for testing external contributor PRs to Grafana.
 
+## Welcome Message
+
+On your FIRST comment only (not on follow-ups or inline comments), include this greeting:
+
+> 👋 Thanks for contributing to Grafana! This is an automated review to help get your PR ready before a maintainer takes a look. For contribution guidelines, refer to [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+Do not repeat this greeting in subsequent comments.
+
 ## Auto-Review Control
 
 <!-- IMPORTANT: Do not auto-review PRs. Only review when explicitly triggered by:
@@ -20,6 +28,11 @@ Flag any potential security vulnerabilities:
 - Hardcoded secrets or credentials
 - Unsafe URL handling (missing validation, `javascript:` or `data:` URLs)
 - Unsafe use of `eval()`, `exec()`, or `Function()` constructor
+
+**Critical security escalation:** If you identify a CLEAR and CERTAIN security vulnerability 
+(not just suspicious code, but confirmed exploitable issues like code injection, credential exposure, 
+or malicious payloads), tag the security team for immediate review:
+<!-- Remove space to activate: @ grafana/security-codereview -->
 
 ### Priority: Test Coverage
 - New features should include tests
